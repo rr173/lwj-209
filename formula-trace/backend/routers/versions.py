@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 from database import get_db
 from models import FormulaVersion, ProductLine, ExclusionGroup, Batch
 from schemas import FormulaVersionCreate, FormulaVersionResponse, VersionTreeNode, CompareResponse, CompareDiffItem
+from utils import compute_batch_scores
 
 router = APIRouter(prefix="/api/versions", tags=["versions"])
 
@@ -160,15 +161,26 @@ async def get_version_tree(product_line_id: int, db: AsyncSession = Depends(get_
     )
     versions = versions_result.scalars().all()
 
+    all_batches_result = await db.execute(
+        select(Batch).where(
+            Batch.version_id.in_([v.id for v in versions]),
+            Batch.skin_feel_score.isnot(None)
+        )
+    )
+    all_batches = all_batches_result.scalars().all()
+    score_map, _, _ = compute_batch_scores(all_batches)
+
+    version_batches = {}
+    for b in all_batches:
+        version_batches.setdefault(b.version_id, []).append(b)
+
     batch_info = {}
     for v in versions:
-        batch_result = await db.execute(
-            select(Batch).where(Batch.version_id == v.id, Batch.skin_feel_score.isnot(None))
-        )
-        batches = batch_result.scalars().all()
-        best_score = max((b.overall_score for b in batches), default=None)
+        vb = version_batches.get(v.id, [])
+        scores = [score_map.get(b.id) for b in vb if b.id in score_map]
+        best_score = max(scores) if scores else None
         batch_info[v.id] = {
-            "count": len(batches),
+            "count": len(vb),
             "best_score": best_score
         }
 
@@ -203,11 +215,20 @@ async def get_version(version_id: int, db: AsyncSession = Depends(get_db)):
     if not version:
         raise HTTPException(status_code=404, detail="版本不存在")
 
-    batch_result = await db.execute(
-        select(Batch).where(Batch.version_id == version_id, Batch.skin_feel_score.isnot(None))
+    all_batches_result = await db.execute(
+        select(Batch).where(
+            Batch.version_id.in_(
+                select(FormulaVersion.id).where(FormulaVersion.product_line_id == version.product_line_id)
+            ),
+            Batch.skin_feel_score.isnot(None)
+        )
     )
-    batches = batch_result.scalars().all()
-    best_score = max((b.overall_score for b in batches), default=None)
+    all_batches = all_batches_result.scalars().all()
+    score_map, _, _ = compute_batch_scores(all_batches)
+
+    version_batches = [b for b in all_batches if b.version_id == version.id]
+    scores = [score_map.get(b.id) for b in version_batches if b.id in score_map]
+    best_score = max(scores) if scores else None
 
     from schemas import IngredientItem
     return FormulaVersionResponse(
@@ -217,6 +238,6 @@ async def get_version(version_id: int, db: AsyncSession = Depends(get_db)):
         parent_id=version.parent_id,
         ingredients=[IngredientItem(**ing) for ing in version.ingredients],
         ingredients_summary=get_ingredients_summary(version.ingredients),
-        batch_count=len(batches),
+        batch_count=len(version_batches),
         best_batch_score=best_score
     )

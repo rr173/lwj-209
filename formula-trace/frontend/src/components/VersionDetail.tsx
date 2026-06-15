@@ -1,23 +1,28 @@
 import { useState } from 'react';
-import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
-import type { FormulaVersion, Batch } from '../types';
+import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography } from 'antd';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import type { FormulaVersion, Batch, IngredientItem } from '../types';
 import { getScoreColor, api } from '../api';
+
+const { Title, Text } = Typography;
 
 interface Props {
   version: FormulaVersion;
   batches: Batch[];
   allBatches: Batch[];
+  onVersionCreated?: () => void;
 }
 
-export default function VersionDetail({ version, batches, allBatches }: Props) {
+export default function VersionDetail({ version, batches, allBatches, onVersionCreated }: Props) {
   const [traceModalVisible, setTraceModalVisible] = useState(false);
   const [traceData, setTraceData] = useState<any>(null);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [createBatchVisible, setCreateBatchVisible] = useState(false);
   const [submitResultVisible, setSubmitResultVisible] = useState(false);
+  const [createVersionVisible, setCreateVersionVisible] = useState(false);
   const [form] = Form.useForm();
   const [resultForm] = Form.useForm();
+  const [versionForm] = Form.useForm();
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -51,6 +56,66 @@ export default function VersionDetail({ version, batches, allBatches }: Props) {
     } catch (e) {
       message.error('创建失败');
     }
+  };
+
+  const handleCreateVersion = async (values: any) => {
+    const ingredients = values.ingredients
+      .filter((item: any) => item.name && item.percentage !== undefined && item.percentage !== null)
+      .map((item: any) => ({
+        name: item.name.trim(),
+        percentage: Number(Number(item.percentage).toFixed(2))
+      }));
+
+    try {
+      const resp = await fetch('/api/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_line_id: version.product_line_id,
+          parent_id: version.id,
+          ingredients
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        let errMsg = '创建失败';
+        if (data?.detail) {
+          if (typeof data.detail === 'object' && data.detail.message) {
+            errMsg = `${data.detail.message}: ${JSON.stringify(data.detail.conflicts)}`;
+          } else if (Array.isArray(data.detail)) {
+            errMsg = data.detail.map((e: any) => e.msg).join('; ');
+          } else {
+            errMsg = String(data.detail);
+          }
+        }
+        message.error(errMsg);
+        return;
+      }
+      message.success(`新版本 V${data.version_number} 创建成功，已挂在当前版本下方！`);
+      setCreateVersionVisible(false);
+      versionForm.resetFields();
+      if (onVersionCreated) {
+        onVersionCreated();
+      }
+      setTimeout(() => window.location.reload(), 800);
+    } catch (e: any) {
+      message.error(e?.message || '创建失败');
+    }
+  };
+
+  const openCreateVersion = () => {
+    versionForm.setFieldsValue({
+      ingredients: version.ingredients.map(ing => ({
+        name: ing.name,
+        percentage: ing.percentage
+      }))
+    });
+    setCreateVersionVisible(true);
+  };
+
+  const calcTotal = (values: any[]) => {
+    if (!values) return 0;
+    return values.reduce((sum, item) => sum + (Number(item?.percentage) || 0), 0);
   };
 
   const handleSubmitResult = async (values: any) => {
@@ -175,9 +240,14 @@ export default function VersionDetail({ version, batches, allBatches }: Props) {
           </Space>
         }
         extra={
-          <Button type="primary" onClick={() => setCreateBatchVisible(true)}>
-            + 创建试产批次
-          </Button>
+          <Space>
+            <Button type="dashed" onClick={openCreateVersion}>
+              <PlusOutlined /> 派生新版本
+            </Button>
+            <Button type="primary" onClick={() => setCreateBatchVisible(true)}>
+              + 创建试产批次
+            </Button>
+          </Space>
         }
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
@@ -346,6 +416,135 @@ export default function VersionDetail({ version, batches, allBatches }: Props) {
           </Form.Item>
           <Form.Item name="cost_per_kg" label="原料成本(元/kg)" rules={[{ required: true }]}>
             <InputNumber min={0} style={{ width: '100%' }} prefix="¥" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <span>从 V{version.version_number} 派生新版本</span>
+            <Tag color="blue">parent_id={version.id}</Tag>
+          </Space>
+        }
+        open={createVersionVisible}
+        onCancel={() => setCreateVersionVisible(false)}
+        onOk={() => versionForm.submit()}
+        width={680}
+        okText="创建新版本"
+      >
+        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+          系统已预填父版本的成分，请直接修改。百分比之和必须精确等于 100.00%。
+        </Typography.Paragraph>
+        <Form
+          form={versionForm}
+          layout="vertical"
+          onFinish={handleCreateVersion}
+        >
+          <Form.List
+            name="ingredients"
+            rules={[
+              {
+                validator: async (_, ingredients) => {
+                  const total = calcTotal(ingredients);
+                  if (Math.abs(total - 100.0) > 0.01) {
+                    return Promise.reject(new Error(`百分比总和需等于100%，当前为 ${total.toFixed(2)}%`));
+                  }
+                }
+              }
+            ]}
+          >
+            {(fields, { add, remove }, { errors }) => (
+              <>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 120px 40px',
+                  gap: 8,
+                  fontWeight: 600,
+                  padding: '0 4px 8px 4px',
+                  borderBottom: '1px solid #f0f0f0',
+                  marginBottom: 8
+                }}>
+                  <span>成分名称</span>
+                  <span style={{ textAlign: 'right' }}>百分比%</span>
+                  <span></span>
+                </div>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Row key={key} gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                    <Col flex="auto">
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'name']}
+                        rules={[{ required: true, message: '必填' }]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input placeholder="成分名称" />
+                      </Form.Item>
+                    </Col>
+                    <Col style={{ width: 130 }}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'percentage']}
+                        rules={[
+                          { required: true, message: '必填' },
+                          { type: 'number', min: 0, max: 100, message: '0-100之间' }
+                        ]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <InputNumber
+                          min={0}
+                          max={100}
+                          step={0.01}
+                          precision={2}
+                          style={{ width: '100%' }}
+                          suffix="%"
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col style={{ width: 40 }}>
+                      <MinusCircleOutlined
+                        onClick={() => remove(name)}
+                        style={{ color: '#f5222d', fontSize: 18, cursor: 'pointer' }}
+                      />
+                    </Col>
+                  </Row>
+                ))}
+                <Form.Item style={{ marginTop: 16 }}>
+                  <Button
+                    type="dashed"
+                    onClick={() => add({ name: '', percentage: 0 })}
+                    block
+                    icon={<PlusOutlined />}
+                  >
+                    添加成分
+                  </Button>
+                  <Form.ErrorList errors={errors} />
+                </Form.Item>
+              </>
+            )}
+          </Form.List>
+
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.ingredients !== curr.ingredients}>
+            {({ getFieldsValue }) => {
+              const values = getFieldsValue();
+              const total = calcTotal(values.ingredients);
+              const ok = Math.abs(total - 100.0) <= 0.01;
+              return (
+                <div style={{
+                  padding: 12,
+                  background: ok ? '#f6ffed' : '#fff1f0',
+                  borderRadius: 6,
+                  border: `1px solid ${ok ? '#b7eb8f' : '#ffa39e'}`,
+                  textAlign: 'center',
+                  fontWeight: 600
+                }}>
+                  <span style={{ color: ok ? '#52c41a' : '#f5222d' }}>
+                    当前合计：{total.toFixed(2)}%
+                    {ok ? ' ✓ 符合要求' : ' ✗ 需调整至100.00%'}
+                  </span>
+                </div>
+              );
+            }}
           </Form.Item>
         </Form>
       </Modal>

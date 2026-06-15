@@ -5,6 +5,7 @@ from datetime import datetime
 from database import get_db
 from models import Batch, FormulaVersion, ProductLine
 from schemas import BatchCreate, BatchTestResult, BatchResponse, TracePathResponse, TraceDiff, IngredientItem
+from utils import compute_batch_scores
 
 router = APIRouter(prefix="/api/batches", tags=["batches"])
 
@@ -12,14 +13,6 @@ router = APIRouter(prefix="/api/batches", tags=["batches"])
 def generate_batch_number(version_id: int, count: int) -> str:
     timestamp = datetime.now().strftime("%Y%m%d")
     return f"B{version_id:04d}-{timestamp}-{count+1:03d}"
-
-
-def calculate_overall_score(batch: Batch, min_cost: float, max_cost: float) -> float:
-    if not batch.has_test_result:
-        return None
-    cost_range = max_cost - min_cost if max_cost > min_cost else 1
-    normalized_cost = (batch.cost_per_kg - min_cost) / cost_range
-    return batch.skin_feel_score * 0.4 + batch.stability_score * 0.4 - normalized_cost * 0.2
 
 
 @router.post("", response_model=BatchResponse, status_code=201)
@@ -69,6 +62,18 @@ async def submit_test_result(batch_id: int, data: BatchTestResult, db: AsyncSess
     await db.commit()
     await db.refresh(batch)
 
+    v_result = await db.execute(
+        select(Batch).where(
+            Batch.version_id.in_(
+                select(FormulaVersion.id).where(FormulaVersion.product_line_id == batch.version.product_line_id)
+            ),
+            Batch.skin_feel_score.isnot(None)
+        )
+    )
+    all_batches = v_result.scalars().all()
+    score_map, _, _ = compute_batch_scores(all_batches)
+    overall = score_map.get(batch.id)
+
     return BatchResponse(
         id=batch.id,
         version_id=batch.version_id,
@@ -78,7 +83,7 @@ async def submit_test_result(batch_id: int, data: BatchTestResult, db: AsyncSess
         skin_feel_score=batch.skin_feel_score,
         stability_score=batch.stability_score,
         cost_per_kg=batch.cost_per_kg,
-        overall_score=batch.overall_score
+        overall_score=overall
     )
 
 
@@ -106,12 +111,11 @@ async def list_batches_by_product_line(product_line_id: int, db: AsyncSession = 
     if not batches:
         return []
 
-    costs = [b.cost_per_kg for b in batches if b.cost_per_kg]
-    min_cost, max_cost = min(costs), max(costs)
+    score_map, _, _ = compute_batch_scores(batches)
 
     batches_with_score = []
     for b in batches:
-        overall = calculate_overall_score(b, min_cost, max_cost)
+        overall = score_map.get(b.id)
         batches_with_score.append((b, overall))
 
     batches_with_score.sort(key=lambda x: x[1] if x[1] is not None else -1, reverse=True)
@@ -138,6 +142,19 @@ async def get_batch(batch_id: int, db: AsyncSession = Depends(get_db)):
     batch = result.scalar_one_or_none()
     if not batch:
         raise HTTPException(status_code=404, detail="批次不存在")
+
+    v_result = await db.execute(
+        select(Batch).where(
+            Batch.version_id.in_(
+                select(FormulaVersion.id).where(FormulaVersion.product_line_id == batch.version.product_line_id)
+            ),
+            Batch.skin_feel_score.isnot(None)
+        )
+    )
+    all_batches = v_result.scalars().all()
+    score_map, _, _ = compute_batch_scores(all_batches)
+    overall = score_map.get(batch.id)
+
     return BatchResponse(
         id=batch.id,
         version_id=batch.version_id,
@@ -147,7 +164,7 @@ async def get_batch(batch_id: int, db: AsyncSession = Depends(get_db)):
         skin_feel_score=batch.skin_feel_score,
         stability_score=batch.stability_score,
         cost_per_kg=batch.cost_per_kg,
-        overall_score=batch.overall_score
+        overall_score=overall
     )
 
 
@@ -157,6 +174,19 @@ async def get_batch_by_number(batch_number: str, db: AsyncSession = Depends(get_
     batch = result.scalar_one_or_none()
     if not batch:
         raise HTTPException(status_code=404, detail="批次不存在")
+
+    v_result = await db.execute(
+        select(Batch).where(
+            Batch.version_id.in_(
+                select(FormulaVersion.id).where(FormulaVersion.product_line_id == batch.version.product_line_id)
+            ),
+            Batch.skin_feel_score.isnot(None)
+        )
+    )
+    all_batches = v_result.scalars().all()
+    score_map, _, _ = compute_batch_scores(all_batches)
+    overall = score_map.get(batch.id)
+
     return BatchResponse(
         id=batch.id,
         version_id=batch.version_id,
@@ -166,7 +196,7 @@ async def get_batch_by_number(batch_number: str, db: AsyncSession = Depends(get_
         skin_feel_score=batch.skin_feel_score,
         stability_score=batch.stability_score,
         cost_per_kg=batch.cost_per_kg,
-        overall_score=batch.overall_score
+        overall_score=overall
     )
 
 
