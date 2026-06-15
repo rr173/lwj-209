@@ -174,6 +174,15 @@ export interface CostSimulateResponse {
   missing_quotes: string[];
 }
 
+export interface CompatibilityListItem {
+  other_ingredient: string;
+  compatibility_level: string;
+  compatibility_score: number | null;
+  manifestation: string | null;
+  notes: string | null;
+  percentage: number | null;
+}
+
 export interface IngredientTypeConfig {
   id: number;
   ingredient_name: string;

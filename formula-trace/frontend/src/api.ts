@@ -15,7 +15,8 @@ import type {
   CostSimulateResponse,
   CostSimulateItem,
   StabilityRiskResponse,
-  AgingSimulationResponse
+  AgingSimulationResponse,
+  CompatibilityListItem
 } from './types';
 
 const API_BASE = '/api';
@@ -80,6 +81,14 @@ export const api = {
 
   getAgingSimulation: (versionId: number, days: number): Promise<AgingSimulationResponse> =>
     axios.get(`${API_BASE}/stability/aging-simulation/${versionId}`, { params: { days } }).then(r => r.data),
+
+  getCompatibilityByIngredient: (ingredientName: string, versionId?: number): Promise<{
+    ingredient_name: string;
+    relations: CompatibilityListItem[];
+  }> =>
+    axios.get(`${API_BASE}/stability/compatibility-rules/by-ingredient/${ingredientName}`, {
+      params: versionId ? { version_id: versionId } : {}
+    }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

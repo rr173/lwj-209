@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider } from 'antd';
 import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse } from '../types';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem } from '../types';
 import { getScoreColor, api } from '../api';
 
 const { Title, Text } = Typography;
@@ -54,6 +54,12 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [agingLoading, setAgingLoading] = useState(false);
   const [simulationDays, setSimulationDays] = useState<number>(30);
   const [hasRunSimulation, setHasRunSimulation] = useState(false);
+
+  const [compatibilityData, setCompatibilityData] = useState<{
+    ingredient_name: string;
+    relations: CompatibilityListItem[];
+  } | null>(null);
+  const [compatibilityLoading, setCompatibilityLoading] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -110,6 +116,26 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       });
     return () => { cancelled = true; };
   }, [selectedIngredient, version.product_line_id]);
+
+  useEffect(() => {
+    if (!selectedIngredient) return;
+    let cancelled = false;
+    setCompatibilityLoading(true);
+    api.getCompatibilityByIngredient(selectedIngredient, version.id)
+      .then(data => {
+        if (!cancelled) setCompatibilityData(data);
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('获取成分相容性数据失败');
+          setCompatibilityData(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCompatibilityLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedIngredient, version.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,8 +260,21 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
         })));
       }
     } else {
+      if (!costBreakdown) {
+        message.warning('成本数据正在加载，请稍候再试');
+        return;
+      }
+      const currentNames = costBreakdown.breakdown.map(i => i.ingredient_name);
+      const simNames = simulateIngredients.map(i => i.name);
+      const needsReset = !currentNames.every(n => simNames.includes(n)) || 
+                         !simNames.every(n => currentNames.includes(n));
+      if (needsReset || simulateIngredients.length === 0) {
+        setSimulateIngredients(costBreakdown.breakdown.map(item => ({
+          name: item.ingredient_name,
+          percentage: item.percentage
+        })));
+      }
       setSimulateMode(true);
-      runSimulation();
     }
   };
 
@@ -276,6 +315,7 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       case '相容': return '#52c41a';
       case '轻微不相容': return '#faad14';
       case '严重不相容': return '#f5222d';
+      case '未配置': return '#8c8c8c';
       default: return '#8c8c8c';
     }
   };
@@ -792,6 +832,91 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               { title: '最优批次综合评分', dataIndex: 'score', key: 'score' }
             ]}
           />
+        </Card>
+      )}
+
+      {selectedIngredient && (
+        <Card
+          title={
+            <Space>
+              <SafetyOutlined style={{ color: '#1890ff' }} />
+              <span>{selectedIngredient} 与配方中其他成分的相容性</span>
+            </Space>
+          }
+          size="small"
+          loading={compatibilityLoading}
+        >
+          {compatibilityData && compatibilityData.relations.length > 0 ? (
+            <Table
+              size="small"
+              dataSource={compatibilityData.relations.map((rel, idx) => ({ key: idx, ...rel }))}
+              pagination={{ pageSize: 10 }}
+              columns={[
+                {
+                  title: '其他成分',
+                  dataIndex: 'other_ingredient',
+                  key: 'other_ingredient',
+                  width: 140,
+                  render: (v: string, record: any) => (
+                    <Space direction="vertical" size={0}>
+                      <span style={{ fontWeight: 600 }}>{v}</span>
+                      {record.percentage !== null && (
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          含量: {record.percentage.toFixed(2)}%
+                        </Text>
+                      )}
+                    </Space>
+                  )
+                },
+                {
+                  title: '相容性等级',
+                  dataIndex: 'compatibility_level',
+                  key: 'compatibility_level',
+                  width: 120,
+                  render: (v: string) => (
+                    <Tag color={getCompatibilityLevelColor(v)}>{v}</Tag>
+                  )
+                },
+                {
+                  title: '相容性分数',
+                  dataIndex: 'compatibility_score',
+                  key: 'compatibility_score',
+                  width: 110,
+                  align: 'center',
+                  render: (v: number | null) => (
+                    v !== null ? (
+                      <span style={{
+                        fontFamily: 'monospace',
+                        color: getCompatibilityLevelColor(
+                          v >= 80 ? '相容' : v >= 50 ? '轻微不相容' : '严重不相容'
+                        ),
+                        fontWeight: 600
+                      }}>
+                        {v.toFixed(0)}/100
+                      </span>
+                    ) : (
+                      <Text type="secondary">-</Text>
+                    )
+                  )
+                },
+                {
+                  title: '风险表现',
+                  dataIndex: 'manifestation',
+                  key: 'manifestation',
+                  render: (v: string | null) => v || <Text type="secondary">暂无数据</Text>
+                },
+                {
+                  title: '备注',
+                  dataIndex: 'notes',
+                  key: 'notes',
+                  ellipsis: true,
+                  render: (v: string | null) => v || <Text type="secondary">-</Text>
+                }
+              ]}
+            />
+          ) : (
+            !compatibilityLoading && <Empty description="暂无相容性数据" />
+          )}
         </Card>
       )}
     </Space>

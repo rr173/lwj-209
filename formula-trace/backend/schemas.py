@@ -296,9 +296,10 @@ class CompatibilityRuleResponse(BaseModel):
 class CompatibilityListItem(BaseModel):
     other_ingredient: str
     compatibility_level: str
-    compatibility_score: float
-    manifestation: str
+    compatibility_score: Optional[float]
+    manifestation: Optional[str]
     notes: Optional[str]
+    percentage: Optional[float] = None
 
 
 class CompatibilityListResponse(BaseModel):

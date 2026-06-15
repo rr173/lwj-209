@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_
@@ -162,6 +163,7 @@ async def get_compatibility_rules(
 @router.get("/compatibility-rules/by-ingredient/{ingredient_name}", response_model=CompatibilityListResponse)
 async def get_compatibility_by_ingredient(
     ingredient_name: str,
+    version_id: Optional[int] = Query(None, description="可选：版本ID，提供则显示该版本中所有成分的关系"),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
@@ -174,21 +176,67 @@ async def get_compatibility_by_ingredient(
     )
     rules = result.scalars().all()
 
-    relations = []
+    rule_map = {}
     for rule in rules:
         other = rule.ingredient_b if rule.ingredient_a == ingredient_name else rule.ingredient_a
-        relations.append(CompatibilityListItem(
-            other_ingredient=other,
-            compatibility_level=rule.compatibility_level,
-            compatibility_score=rule.compatibility_score,
-            manifestation=rule.manifestation,
-            notes=rule.notes
-        ))
+        rule_map[other] = rule
 
-    return CompatibilityListResponse(
-        ingredient_name=ingredient_name,
-        relations=sorted(relations, key=lambda x: x.compatibility_score)
-    )
+    if version_id is not None:
+        version_result = await db.execute(
+            select(FormulaVersion).where(FormulaVersion.id == version_id)
+        )
+        version = version_result.scalar_one_or_none()
+        if not version:
+            raise HTTPException(status_code=404, detail="版本不存在")
+
+        relations = []
+        for ing in version.ingredients:
+            other_name = ing["name"]
+            if other_name == ingredient_name:
+                continue
+
+            if other_name in rule_map:
+                rule = rule_map[other_name]
+                relations.append(CompatibilityListItem(
+                    other_ingredient=other_name,
+                    compatibility_level=rule.compatibility_level,
+                    compatibility_score=rule.compatibility_score,
+                    manifestation=rule.manifestation,
+                    notes=rule.notes,
+                    percentage=ing["percentage"]
+                ))
+            else:
+                relations.append(CompatibilityListItem(
+                    other_ingredient=other_name,
+                    compatibility_level="未配置",
+                    compatibility_score=None,
+                    manifestation=None,
+                    notes=None,
+                    percentage=ing["percentage"]
+                ))
+
+        def sort_key(r):
+            priority = {"严重不相容": 0, "轻微不相容": 1, "未配置": 2, "相容": 3}
+            return (priority.get(r.compatibility_level, 99), - (r.percentage or 0))
+
+        return CompatibilityListResponse(
+            ingredient_name=ingredient_name,
+            relations=sorted(relations, key=sort_key)
+        )
+    else:
+        relations = []
+        for other, rule in rule_map.items():
+            relations.append(CompatibilityListItem(
+                other_ingredient=other,
+                compatibility_level=rule.compatibility_level,
+                compatibility_score=rule.compatibility_score,
+                manifestation=rule.manifestation,
+                notes=rule.notes
+            ))
+        return CompatibilityListResponse(
+            ingredient_name=ingredient_name,
+            relations=sorted(relations, key=lambda x: x.compatibility_score if x.compatibility_score is not None else 100)
+        )
 
 
 @router.put("/compatibility-rules/{rule_id}", response_model=CompatibilityRuleResponse)
@@ -278,7 +326,7 @@ async def get_stability_risk_assessment(
     total_deduction = 0.0
 
     for (ing_a, ing_b), rule in all_rules.items():
-        if rule.compatibility_score < 100:
+        if rule.compatibility_level in ["轻微不相容", "严重不相容"]:
             pct_a = ingredient_map[ing_a]
             pct_b = ingredient_map[ing_b]
             deduction = (pct_a * pct_b * (100 - rule.compatibility_score)) / 1000
