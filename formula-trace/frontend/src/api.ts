@@ -8,7 +8,12 @@ import type {
   CompareResponse,
   IngredientTrendResponse,
   FormulaRecommendationResponse,
-  ProductLineIngredientsResponse
+  ProductLineIngredientsResponse,
+  SupplierQuote,
+  SupplierQuoteCreate,
+  CostBreakdownResponse,
+  CostSimulateResponse,
+  CostSimulateItem
 } from './types';
 
 const API_BASE = '/api';
@@ -48,6 +53,24 @@ export const api = {
   getProductLineIngredients: (productLineId: number): Promise<ProductLineIngredientsResponse> =>
     axios.get(`${API_BASE}/analytics/product-line-ingredients`, {
       params: { product_line_id: productLineId }
+    }).then(r => r.data),
+
+  createSupplierQuote: (data: SupplierQuoteCreate): Promise<SupplierQuote> =>
+    axios.post(`${API_BASE}/costs/quotes`, data).then(r => r.data),
+
+  getQuotesByIngredient: (ingredientName: string): Promise<SupplierQuote[]> =>
+    axios.get(`${API_BASE}/costs/quotes/ingredient/${encodeURIComponent(ingredientName)}`).then(r => r.data),
+
+  deleteSupplierQuote: (quoteId: number): Promise<void> =>
+    axios.delete(`${API_BASE}/costs/quotes/${quoteId}`).then(r => r.data),
+
+  getCostBreakdown: (versionId: number): Promise<CostBreakdownResponse> =>
+    axios.get(`${API_BASE}/costs/breakdown/${versionId}`).then(r => r.data),
+
+  simulateCost: (versionId: number, ingredients: CostSimulateItem[]): Promise<CostSimulateResponse> =>
+    axios.post(`${API_BASE}/costs/simulate`, {
+      version_id: versionId,
+      ingredients
     }).then(r => r.data),
 };
 

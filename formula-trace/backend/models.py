@@ -1,7 +1,7 @@
 from sqlalchemy import String, Float, Integer, Date, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
-from datetime import date
+from datetime import date, datetime
 
 
 class ProductLine(Base):
@@ -67,3 +67,21 @@ class Batch(Base):
         if not self.has_test_result:
             return None
         return self.skin_feel_score * 0.4 + self.stability_score * 0.4
+
+
+class SupplierQuote(Base):
+    __tablename__ = "supplier_quotes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    supplier_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    unit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    min_order_quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_to: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    @property
+    def is_active(self) -> bool:
+        today = date.today()
+        return self.valid_from <= today <= self.valid_to

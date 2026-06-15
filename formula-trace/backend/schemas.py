@@ -171,3 +171,79 @@ class FormulaRecommendationResponse(BaseModel):
     base_version_score: float
     recommended_ingredients: list[RecommendedIngredient]
     notes: list[str]
+
+
+class SupplierQuoteCreate(BaseModel):
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+    supplier_name: str = Field(..., min_length=1, max_length=200)
+    unit_price: float = Field(..., gt=0)
+    min_order_quantity: float = Field(..., ge=0)
+    valid_from: date
+    valid_to: date
+
+    @field_validator('valid_to')
+    @classmethod
+    def check_date_order(cls, v, values):
+        if 'valid_from' in values.data and v < values.data['valid_from']:
+            raise ValueError('有效期截止日期不能早于开始日期')
+        return v
+
+
+class SupplierQuoteResponse(BaseModel):
+    id: int
+    ingredient_name: str
+    supplier_name: str
+    unit_price: float
+    min_order_quantity: float
+    valid_from: date
+    valid_to: date
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class CostBreakdownItem(BaseModel):
+    ingredient_name: str
+    percentage: float
+    unit_price: float | None
+    supplier_name: str | None
+    cost: float | None
+    has_quote: bool
+
+
+class CostBreakdownResponse(BaseModel):
+    version_id: int
+    version_number: int
+    total_cost: float
+    breakdown: list[CostBreakdownItem]
+    missing_quotes: list[str]
+
+
+class CostSimulateItem(BaseModel):
+    name: str
+    percentage: float
+
+
+class CostSimulateRequest(BaseModel):
+    version_id: int
+    ingredients: list[CostSimulateItem]
+
+
+class CostSimulateComparison(BaseModel):
+    ingredient_name: str
+    original_percentage: float
+    new_percentage: float
+    original_cost: float | None
+    new_cost: float | None
+    cost_delta: float | None
+
+
+class CostSimulateResponse(BaseModel):
+    version_id: int
+    original_total_cost: float
+    new_total_cost: float
+    total_delta: float
+    delta_percentage: float
+    items: list[CostSimulateComparison]
+    missing_quotes: list[str]

@@ -112,3 +112,64 @@ export interface ProductLineIngredientsResponse {
   product_line_id: number;
   ingredients: string[];
 }
+
+export interface SupplierQuote {
+  id: number;
+  ingredient_name: string;
+  supplier_name: string;
+  unit_price: number;
+  min_order_quantity: number;
+  valid_from: string;
+  valid_to: string;
+  is_active: boolean;
+}
+
+export interface SupplierQuoteCreate {
+  ingredient_name: string;
+  supplier_name: string;
+  unit_price: number;
+  min_order_quantity: number;
+  valid_from: string;
+  valid_to: string;
+}
+
+export interface CostBreakdownItem {
+  ingredient_name: string;
+  percentage: number;
+  unit_price: number | null;
+  supplier_name: string | null;
+  cost: number | null;
+  has_quote: boolean;
+}
+
+export interface CostBreakdownResponse {
+  version_id: number;
+  version_number: number;
+  total_cost: number;
+  breakdown: CostBreakdownItem[];
+  missing_quotes: string[];
+}
+
+export interface CostSimulateItem {
+  name: string;
+  percentage: number;
+}
+
+export interface CostSimulateComparison {
+  ingredient_name: string;
+  original_percentage: number;
+  new_percentage: number;
+  original_cost: number | null;
+  new_cost: number | null;
+  cost_delta: number | null;
+}
+
+export interface CostSimulateResponse {
+  version_id: number;
+  original_total_cost: number;
+  new_total_cost: number;
+  total_delta: number;
+  delta_percentage: number;
+  items: CostSimulateComparison[];
+  missing_quotes: string[];
+}

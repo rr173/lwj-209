@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode } from '../types';
+import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm } from 'antd';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined } from '@ant-design/icons';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote } from '../types';
 import { getScoreColor, api } from '../api';
 
 const { Title, Text } = Typography;
@@ -35,6 +35,18 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [recommendLoading, setrecommendLoading] = useState(false);
   const [allProductLineIngredients, setAllProductLineIngredients] = useState<string[]>([]);
   const [ingredientsLoading, setIngredientsLoading] = useState(false);
+
+  const [costBreakdown, setCostBreakdown] = useState<CostBreakdownResponse | null>(null);
+  const [costLoading, setCostLoading] = useState(false);
+  const [simulateMode, setSimulateMode] = useState(false);
+  const [simulateResult, setSimulateResult] = useState<CostSimulateResponse | null>(null);
+  const [simulateIngredients, setSimulateIngredients] = useState<CostSimulateItem[]>([]);
+
+  const [quoteModalVisible, setQuoteModalVisible] = useState(false);
+  const [quoteForm] = Form.useForm();
+  const [selectedIngredientForQuote, setSelectedIngredientForQuote] = useState<string>('');
+  const [ingredientQuotes, setIngredientQuotes] = useState<SupplierQuote[]>([]);
+  const [quotesLoading, setQuotesLoading] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -91,6 +103,153 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       });
     return () => { cancelled = true; };
   }, [selectedIngredient, version.product_line_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCostLoading(true);
+    api.getCostBreakdown(version.id)
+      .then(data => {
+        if (!cancelled) {
+          setCostBreakdown(data);
+          setSimulateIngredients(data.breakdown.map(item => ({
+            name: item.ingredient_name,
+            percentage: item.percentage
+          })));
+        }
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载成本分析失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCostLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id]);
+
+  const loadIngredientQuotes = async (ingredientName: string) => {
+    setQuotesLoading(true);
+    try {
+      const data = await api.getQuotesByIngredient(ingredientName);
+      setIngredientQuotes(data);
+    } catch (e) {
+      message.error('加载供应商报价失败');
+    } finally {
+      setQuotesLoading(false);
+    }
+  };
+
+  const openQuoteModal = (ingredientName: string) => {
+    setSelectedIngredientForQuote(ingredientName);
+    quoteForm.resetFields();
+    quoteForm.setFieldsValue({ ingredient_name: ingredientName });
+    loadIngredientQuotes(ingredientName);
+    setQuoteModalVisible(true);
+  };
+
+  const handleCreateQuote = async (values: any) => {
+    try {
+      await api.createSupplierQuote({
+        ingredient_name: values.ingredient_name,
+        supplier_name: values.supplier_name,
+        unit_price: values.unit_price,
+        min_order_quantity: values.min_order_quantity || 0,
+        valid_from: values.valid_from.format('YYYY-MM-DD'),
+        valid_to: values.valid_to.format('YYYY-MM-DD')
+      });
+      message.success('报价创建成功');
+      quoteForm.resetFields(['supplier_name', 'unit_price', 'min_order_quantity', 'valid_from', 'valid_to']);
+      quoteForm.setFieldsValue({ ingredient_name: selectedIngredientForQuote });
+      loadIngredientQuotes(selectedIngredientForQuote);
+      const data = await api.getCostBreakdown(version.id);
+      setCostBreakdown(data);
+      if (!simulateMode) {
+        setSimulateIngredients(data.breakdown.map(item => ({
+          name: item.ingredient_name,
+          percentage: item.percentage
+        })));
+      }
+    } catch (e: any) {
+      let errMsg = '创建失败';
+      if (e?.response?.data?.detail) {
+        errMsg = e.response.data.detail;
+      }
+      message.error(errMsg);
+    }
+  };
+
+  const handleDeleteQuote = async (quoteId: number) => {
+    try {
+      await api.deleteSupplierQuote(quoteId);
+      message.success('删除成功');
+      loadIngredientQuotes(selectedIngredientForQuote);
+      const data = await api.getCostBreakdown(version.id);
+      setCostBreakdown(data);
+      if (!simulateMode) {
+        setSimulateIngredients(data.breakdown.map(item => ({
+          name: item.ingredient_name,
+          percentage: item.percentage
+        })));
+      }
+    } catch (e) {
+      message.error('删除失败');
+    }
+  };
+
+  const toggleSimulateMode = () => {
+    if (simulateMode) {
+      setSimulateMode(false);
+      setSimulateResult(null);
+      if (costBreakdown) {
+        setSimulateIngredients(costBreakdown.breakdown.map(item => ({
+          name: item.ingredient_name,
+          percentage: item.percentage
+        })));
+      }
+    } else {
+      setSimulateMode(true);
+      runSimulation();
+    }
+  };
+
+  const runSimulation = async () => {
+    try {
+      const data = await api.simulateCost(version.id, simulateIngredients);
+      setSimulateResult(data);
+    } catch (e) {
+      message.error('成本模拟失败');
+    }
+  };
+
+  const handleSimulatePercentageChange = (ingredientName: string, value: number | null) => {
+    if (value === null || value === undefined) return;
+    const newIngredients = simulateIngredients.map(item =>
+      item.name === ingredientName ? { ...item, percentage: value } : item
+    );
+    setSimulateIngredients(newIngredients);
+  };
+
+  useEffect(() => {
+    if (simulateMode && simulateIngredients.length > 0) {
+      const timer = setTimeout(() => {
+        runSimulation();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [simulateIngredients, simulateMode]);
+
+  const pieData = useMemo(() => {
+    if (!costBreakdown) return [];
+    return costBreakdown.breakdown
+      .filter(item => item.cost !== null && item.cost > 0)
+      .map(item => ({
+        name: item.ingredient_name,
+        value: item.cost
+      }));
+  }, [costBreakdown]);
+
+  const COLORS = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7', '#fa709a', '#fee140'];
 
   const handleTrace = async (batch: Batch) => {
     setSelectedBatch(batch);
@@ -559,6 +718,205 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     </Space>
   );
 
+  const renderCostTab = () => (
+    <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Card
+        size="small"
+        title={
+          <Space>
+            <span>成本分析概览</span>
+            <Button
+              type={simulateMode ? 'primary' : 'default'}
+              size="small"
+              icon={<CalculatorOutlined />}
+              onClick={toggleSimulateMode}
+            >
+              {simulateMode ? '退出模拟' : '成本模拟'}
+            </Button>
+          </Space>
+        }
+      >
+        <Row gutter={24}>
+          <Col span={10}>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <Text type="secondary">每公斤原料成本</Text>
+              <div style={{ fontSize: 32, fontWeight: 700, color: '#1890ff', marginTop: 4 }}>
+                ¥{costBreakdown ? costBreakdown.total_cost.toFixed(2) : '-'}
+              </div>
+              {simulateMode && simulateResult && (
+                <div style={{ marginTop: 8 }}>
+                  <Tag color={simulateResult.total_delta >= 0 ? 'red' : 'green'} style={{ fontSize: 14, padding: '4px 12px' }}>
+                    模拟后: ¥{simulateResult.new_total_cost.toFixed(2)}
+                    ({simulateResult.total_delta >= 0 ? '+' : ''}{simulateResult.total_delta.toFixed(2)},
+                    {simulateResult.delta_percentage >= 0 ? '+' : ''}{simulateResult.delta_percentage.toFixed(2)}%)
+                  </Tag>
+                </div>
+              )}
+            </div>
+            {pieData.length > 0 ? (
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: any) => [`¥${Number(value).toFixed(2)}`, '成本']}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <Empty description="暂无成本数据" style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+            )}
+          </Col>
+          <Col span={14}>
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              {costBreakdown && costBreakdown.missing_quotes.length > 0 && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={`以下成分缺少供应商报价：${costBreakdown.missing_quotes.join('、')}`}
+                />
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text strong>成本明细</Text>
+                {simulateMode && (
+                  <Text type="secondary">
+                    当前合计: {simulateIngredients.reduce((s, i) => s + i.percentage, 0).toFixed(2)}%
+                  </Text>
+                )}
+              </div>
+              <Table
+                size="small"
+                loading={costLoading}
+                dataSource={simulateMode && simulateResult ? simulateResult.items : (costBreakdown?.breakdown || [])}
+                rowKey="ingredient_name"
+                pagination={false}
+                scroll={{ y: 280 }}
+                columns={[
+                  {
+                    title: '成分名称',
+                    dataIndex: 'ingredient_name',
+                    key: 'ingredient_name',
+                    width: 130,
+                    render: (v: string, record: any) => (
+                      <Space>
+                        <span>{v}</span>
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => openQuoteModal(v)}
+                        >
+                          报价
+                        </Button>
+                      </Space>
+                    )
+                  },
+                  {
+                    title: '百分比',
+                    dataIndex: 'percentage',
+                    key: 'percentage',
+                    width: 100,
+                    align: 'right',
+                    render: (v: number, record: any) => {
+                      if (simulateMode) {
+                        const simItem = simulateIngredients.find(i => i.name === record.ingredient_name);
+                        const newPct = simItem?.percentage ?? v;
+                        const origPct = record.original_percentage ?? v;
+                        const delta = newPct - origPct;
+                        return (
+                          <Space direction="vertical" size={2} align="end">
+                            <InputNumber
+                              size="small"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              precision={2}
+                              value={newPct}
+                              style={{ width: 90 }}
+                              onChange={(val) => handleSimulatePercentageChange(record.ingredient_name, val)}
+                              suffix="%"
+                            />
+                            {delta !== 0 && (
+                              <Text style={{ fontSize: 11, color: delta > 0 ? '#52c41a' : '#f5222d', fontWeight: 600 }}>
+                                ({delta > 0 ? '+' : ''}{delta.toFixed(2)}%)
+                              </Text>
+                            )}
+                          </Space>
+                        );
+                      }
+                      return <span style={{ fontFamily: 'monospace' }}>{v.toFixed(2)}%</span>;
+                    }
+                  },
+                  {
+                    title: '单价(元/kg)',
+                    dataIndex: 'unit_price',
+                    key: 'unit_price',
+                    width: 90,
+                    align: 'right',
+                    render: (v: number | null, record: any) => {
+                      if (simulateMode && !record.has_quote && !record.unit_price) {
+                        return v ? <span style={{ fontFamily: 'monospace' }}>¥{v.toFixed(2)}</span> : <Tag color="default">无报价</Tag>;
+                      }
+                      return v ? <span style={{ fontFamily: 'monospace' }}>¥{v.toFixed(2)}</span> : <Tag color="default">无报价</Tag>;
+                    }
+                  },
+                  {
+                    title: '供应商',
+                    dataIndex: 'supplier_name',
+                    key: 'supplier_name',
+                    width: 100,
+                    ellipsis: true,
+                    render: (v: string | null) => v || '-'
+                  },
+                  {
+                    title: '成本(元)',
+                    dataIndex: 'cost',
+                    key: 'cost',
+                    width: 100,
+                    align: 'right',
+                    render: (v: number | null, record: any) => {
+                      if (simulateMode && simulateResult) {
+                        const newCost = record.new_cost;
+                        const costDelta = record.cost_delta;
+                        return (
+                          <Space direction="vertical" size={2} align="end">
+                            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                              {newCost !== null ? `¥${newCost.toFixed(2)}` : '-'}
+                            </span>
+                            {costDelta !== null && costDelta !== 0 && (
+                              <Text style={{ fontSize: 11, color: costDelta > 0 ? '#f5222d' : '#52c41a' }}>
+                                ({costDelta > 0 ? '+' : ''}¥{costDelta.toFixed(2)})
+                              </Text>
+                            )}
+                          </Space>
+                        );
+                      }
+                      return v ? <span style={{ fontFamily: 'monospace' }}>¥{v.toFixed(2)}</span> : '-';
+                    }
+                  }
+                ]}
+              />
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+    </Space>
+  );
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <Card
@@ -599,6 +957,11 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'trend',
               label: <span><LineChartOutlined /> 成分趋势</span>,
               children: renderTrendTab()
+            },
+            {
+              key: 'cost',
+              label: <span><DollarOutlined /> 成本分析</span>,
+              children: renderCostTab()
             }
           ]}
         />
@@ -962,6 +1325,128 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
             </div>
           </Space>
         ) : null}
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <DollarOutlined style={{ color: '#1890ff' }} />
+            <span>供应商报价管理 - {selectedIngredientForQuote}</span>
+          </Space>
+        }
+        open={quoteModalVisible}
+        onCancel={() => {
+          setQuoteModalVisible(false);
+          setIngredientQuotes([]);
+        }}
+        width={720}
+        footer={null}
+      >
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Card size="small" title="添加新报价">
+            <Form form={quoteForm} layout="vertical" onFinish={handleCreateQuote}>
+              <Row gutter={8}>
+                <Col span={12}>
+                  <Form.Item name="ingredient_name" label="成分名称" rules={[{ required: true }]}>
+                    <Input readOnly style={{ background: '#f5f5f5' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="supplier_name" label="供应商名称" rules={[{ required: true }]}>
+                    <Input placeholder="请输入供应商名称" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={8}>
+                <Col span={8}>
+                  <Form.Item name="unit_price" label="单价(元/kg)" rules={[{ required: true }]}>
+                    <InputNumber min={0} step={0.01} precision={2} style={{ width: '100%' }} prefix="¥" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="min_order_quantity" label="最小起订量(kg)" initialValue={0}>
+                    <InputNumber min={0} step={0.1} precision={1} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="操作" style={{ marginBottom: 0 }}>
+                    <Button type="primary" htmlType="submit" icon={<PlusOutlined />} style={{ marginTop: 24 }}>
+                      添加报价
+                    </Button>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={8}>
+                <Col span={12}>
+                  <Form.Item name="valid_from" label="有效期开始" rules={[{ required: true }]}>
+                    <DatePicker style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="valid_to" label="有效期截止" rules={[{ required: true }]}>
+                    <DatePicker style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Form>
+          </Card>
+
+          <Card size="small" title="已有报价列表" loading={quotesLoading}>
+            {ingredientQuotes.length > 0 ? (
+              <Table
+                size="small"
+                dataSource={ingredientQuotes}
+                rowKey="id"
+                pagination={false}
+                columns={[
+                  { title: '供应商', dataIndex: 'supplier_name', key: 'supplier_name' },
+                  {
+                    title: '单价(元/kg)',
+                    dataIndex: 'unit_price',
+                    key: 'unit_price',
+                    width: 100,
+                    align: 'right',
+                    render: (v: number) => <span style={{ fontFamily: 'monospace' }}>¥{v.toFixed(2)}</span>
+                  },
+                  {
+                    title: '最小起订量(kg)',
+                    dataIndex: 'min_order_quantity',
+                    key: 'min_order_quantity',
+                    width: 110,
+                    align: 'right',
+                    render: (v: number) => v.toFixed(1)
+                  },
+                  { title: '有效期开始', dataIndex: 'valid_from', key: 'valid_from', width: 100 },
+                  { title: '有效期截止', dataIndex: 'valid_to', key: 'valid_to', width: 100 },
+                  {
+                    title: '状态',
+                    dataIndex: 'is_active',
+                    key: 'is_active',
+                    width: 80,
+                    render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? '有效' : '已过期'}</Tag>
+                  },
+                  {
+                    title: '操作',
+                    key: 'actions',
+                    width: 60,
+                    render: (_: any, record: SupplierQuote) => (
+                      <Popconfirm
+                        title="确定删除这个报价吗？"
+                        onConfirm={() => handleDeleteQuote(record.id)}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+                      </Popconfirm>
+                    )
+                  }
+                ]}
+              />
+            ) : (
+              <Empty description="暂无报价" />
+            )}
+          </Card>
+        </Space>
       </Modal>
     </Space>
   );

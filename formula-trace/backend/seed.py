@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
 from sqlalchemy import select
 from database import async_session_maker
-from models import ProductLine, ExclusionGroup, FormulaVersion, Batch
+from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote
 
 
 async def seed_database():
@@ -166,5 +166,39 @@ async def seed_database():
             cost_per_kg=115.0
         )
         db.add(b3)
+
+        today = date.today()
+        quotes = [
+            {"ingredient": "去离子水", "supplier": "水源化工", "price": 2.5, "moq": 1000},
+            {"ingredient": "去离子水", "supplier": "净化水业", "price": 3.0, "moq": 500},
+            {"ingredient": "甘油", "supplier": "宝洁化工", "price": 15.0, "moq": 100},
+            {"ingredient": "甘油", "supplier": "油脂化工", "price": 12.5, "moq": 500},
+            {"ingredient": "丙二醇", "supplier": "宝洁化工", "price": 18.0, "moq": 100},
+            {"ingredient": "烟酰胺", "supplier": "帝斯曼", "price": 120.0, "moq": 25},
+            {"ingredient": "烟酰胺", "supplier": "朗盛化工", "price": 95.0, "moq": 100},
+            {"ingredient": "透明质酸钠", "supplier": "华熙生物", "price": 2500.0, "moq": 1},
+            {"ingredient": "透明质酸钠", "supplier": "阜丰生物", "price": 1800.0, "moq": 5},
+            {"ingredient": "维生素C糖苷", "supplier": "DSM", "price": 800.0, "moq": 10},
+            {"ingredient": "卡波姆", "supplier": "路博润", "price": 150.0, "moq": 20},
+            {"ingredient": "三乙醇胺", "supplier": "陶氏化学", "price": 28.0, "moq": 50},
+            {"ingredient": "防腐剂", "supplier": "舒美化工", "price": 65.0, "moq": 25},
+            {"ingredient": "香精", "supplier": "奇华顿", "price": 450.0, "moq": 5},
+            {"ingredient": "熊果苷", "supplier": "DSM", "price": 320.0, "moq": 10},
+            {"ingredient": "泛醇", "supplier": "巴斯夫", "price": 180.0, "moq": 15},
+            {"ingredient": "水杨酸", "supplier": "默克", "price": 95.0, "moq": 20},
+            {"ingredient": "甘草酸二钾", "supplier": "甘草原料", "price": 280.0, "moq": 10},
+            {"ingredient": "红没药醇", "supplier": "德之馨", "price": 650.0, "moq": 5},
+        ]
+
+        for q in quotes:
+            quote = SupplierQuote(
+                ingredient_name=q["ingredient"],
+                supplier_name=q["supplier"],
+                unit_price=q["price"],
+                min_order_quantity=q["moq"],
+                valid_from=today - timedelta(days=30),
+                valid_to=today + timedelta(days=365)
+            )
+            db.add(quote)
 
         await db.commit()
