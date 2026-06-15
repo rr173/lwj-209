@@ -137,3 +137,37 @@ class CompareResponse(BaseModel):
     left_version: int
     right_version: int
     diff: list[CompareDiffItem]
+
+
+class IngredientTrendRecord(BaseModel):
+    version_number: int
+    version_id: int
+    percentage: float
+    best_batch_score: float
+
+
+class IngredientTrendResponse(BaseModel):
+    product_line_id: int
+    ingredient_name: str
+    records: list[IngredientTrendRecord]
+    pearson_correlation: float | None
+    is_strong_correlation: bool
+    data_point_count: int
+
+
+class RecommendedIngredient(BaseModel):
+    name: str
+    original_percentage: float
+    recommended_percentage: float
+    adjustment: str
+    correlation: float | None
+    reason: str
+
+
+class FormulaRecommendationResponse(BaseModel):
+    product_line_id: int
+    base_version_id: int
+    base_version_number: int
+    base_version_score: float
+    recommended_ingredients: list[RecommendedIngredient]
+    notes: list[str]

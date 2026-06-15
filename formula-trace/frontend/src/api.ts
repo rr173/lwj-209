@@ -5,7 +5,9 @@ import type {
   FormulaVersion,
   Batch,
   TracePathResponse,
-  CompareResponse
+  CompareResponse,
+  IngredientTrendResponse,
+  FormulaRecommendationResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -31,6 +33,16 @@ export const api = {
 
   compareVersions: (leftId: number, rightId: number): Promise<CompareResponse> =>
     axios.get(`${API_BASE}/versions/compare`, { params: { left_id: leftId, right_id: rightId } }).then(r => r.data),
+
+  getIngredientTrend: (productLineId: number, ingredientName: string): Promise<IngredientTrendResponse> =>
+    axios.get(`${API_BASE}/analytics/ingredient-trend`, {
+      params: { product_line_id: productLineId, ingredient_name: ingredientName }
+    }).then(r => r.data),
+
+  getFormulaRecommendation: (productLineId: number): Promise<FormulaRecommendationResponse> =>
+    axios.get(`${API_BASE}/analytics/recommend-formula`, {
+      params: { product_line_id: productLineId }
+    }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

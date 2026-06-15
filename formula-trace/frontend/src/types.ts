@@ -73,3 +73,37 @@ export interface CompareResponse {
   right_version: number;
   diff: CompareDiffItem[];
 }
+
+export interface IngredientTrendRecord {
+  version_number: number;
+  version_id: number;
+  percentage: number;
+  best_batch_score: number;
+}
+
+export interface IngredientTrendResponse {
+  product_line_id: number;
+  ingredient_name: string;
+  records: IngredientTrendRecord[];
+  pearson_correlation: number | null;
+  is_strong_correlation: boolean;
+  data_point_count: number;
+}
+
+export interface RecommendedIngredient {
+  name: string;
+  original_percentage: number;
+  recommended_percentage: number;
+  adjustment: string;
+  correlation: number | null;
+  reason: string;
+}
+
+export interface FormulaRecommendationResponse {
+  product_line_id: number;
+  base_version_id: number;
+  base_version_number: number;
+  base_version_score: number;
+  recommended_ingredients: RecommendedIngredient[];
+  notes: string[];
+}

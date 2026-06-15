@@ -1,4 +1,21 @@
 from typing import Iterable
+import math
+
+
+def pearson_correlation(x: list[float], y: list[float]) -> float | None:
+    n = len(x)
+    if n < 3 or len(y) != n:
+        return None
+    sum_x = sum(x)
+    sum_y = sum(y)
+    sum_xy = sum(xi * yi for xi, yi in zip(x, y))
+    sum_x_sq = sum(xi ** 2 for xi in x)
+    sum_y_sq = sum(yi ** 2 for yi in y)
+    numerator = n * sum_xy - sum_x * sum_y
+    denominator = math.sqrt((n * sum_x_sq - sum_x ** 2) * (n * sum_y_sq - sum_y ** 2))
+    if denominator == 0:
+        return None
+    return numerator / denominator
 
 
 def calculate_overall_score(

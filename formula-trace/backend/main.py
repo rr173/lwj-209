@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import engine, Base
-from routers import product_lines, versions, batches, exclusion_groups
+from routers import product_lines, versions, batches, exclusion_groups, analytics
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.include_router(product_lines.router)
 app.include_router(versions.router)
 app.include_router(batches.router)
 app.include_router(exclusion_groups.router)
+app.include_router(analytics.router)
 
 
 @app.get("/api/health")

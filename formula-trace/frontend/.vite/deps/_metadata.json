@@ -1,64 +1,73 @@
 {
-  "hash": "c1c8bc4f",
+  "hash": "454e6b83",
   "configHash": "3c8d0597",
-  "lockfileHash": "402fd326",
-  "browserHash": "3abb2bee",
+  "lockfileHash": "0cc5c1f1",
+  "browserHash": "5ade546e",
   "optimized": {
     "react/jsx-dev-runtime": {
       "src": "../../node_modules/react/jsx-dev-runtime.js",
       "file": "react_jsx-dev-runtime.js",
-      "fileHash": "a289baa6",
+      "fileHash": "52fba946",
       "needsInterop": true
     },
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "5ac9f877",
+      "fileHash": "a3ce982a",
       "needsInterop": true
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "e343b415",
+      "fileHash": "f6d37288",
       "needsInterop": true
     },
     "antd": {
       "src": "../../node_modules/antd/es/index.js",
       "file": "antd.js",
-      "fileHash": "353964fc",
+      "fileHash": "71ba26d2",
       "needsInterop": false
     },
     "antd/locale/zh_CN": {
       "src": "../../node_modules/antd/locale/zh_CN.js",
       "file": "antd_locale_zh_CN.js",
-      "fileHash": "540c5118",
+      "fileHash": "6bb37707",
       "needsInterop": true
     },
     "@ant-design/icons": {
       "src": "../../node_modules/@ant-design/icons/es/index.js",
       "file": "@ant-design_icons.js",
-      "fileHash": "700db60b",
+      "fileHash": "7db2cc84",
       "needsInterop": false
     },
     "axios": {
       "src": "../../node_modules/axios/index.js",
       "file": "axios.js",
-      "fileHash": "fd274bf4",
+      "fileHash": "8aa00121",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "078996d8",
       "needsInterop": false
     }
   },
   "chunks": {
-    "chunk-TNTPHDQH": {
-      "file": "chunk-TNTPHDQH.js"
+    "chunk-JMVEG3FK": {
+      "file": "chunk-JMVEG3FK.js"
     },
-    "chunk-HKKCYP37": {
-      "file": "chunk-HKKCYP37.js"
+    "chunk-S7NWK3X4": {
+      "file": "chunk-S7NWK3X4.js"
     },
-    "chunk-32E4H3EV": {
-      "file": "chunk-32E4H3EV.js"
+    "chunk-ONJGPFVU": {
+      "file": "chunk-ONJGPFVU.js"
     },
-    "chunk-G3PMV62Z": {
-      "file": "chunk-G3PMV62Z.js"
+    "chunk-TWJRYSII": {
+      "file": "chunk-TWJRYSII.js"
+    },
+    "chunk-DC5AMYBS": {
+      "file": "chunk-DC5AMYBS.js"
     }
   }
 }
