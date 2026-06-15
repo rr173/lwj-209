@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined } from '@ant-design/icons';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote } from '../types';
+import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider } from 'antd';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse } from '../types';
 import { getScoreColor, api } from '../api';
 
 const { Title, Text } = Typography;
@@ -47,6 +47,13 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [selectedIngredientForQuote, setSelectedIngredientForQuote] = useState<string>('');
   const [ingredientQuotes, setIngredientQuotes] = useState<SupplierQuote[]>([]);
   const [quotesLoading, setQuotesLoading] = useState(false);
+
+  const [stabilityRisk, setStabilityRisk] = useState<StabilityRiskResponse | null>(null);
+  const [stabilityLoading, setStabilityLoading] = useState(false);
+  const [agingSimulation, setAgingSimulation] = useState<AgingSimulationResponse | null>(null);
+  const [agingLoading, setAgingLoading] = useState(false);
+  const [simulationDays, setSimulationDays] = useState<number>(30);
+  const [hasRunSimulation, setHasRunSimulation] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -124,6 +131,25 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       })
       .finally(() => {
         if (!cancelled) setCostLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStabilityLoading(true);
+    api.getStabilityRisk(version.id)
+      .then(data => {
+        if (!cancelled) setStabilityRisk(data);
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载稳定性风险评估失败');
+          setStabilityRisk(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStabilityLoading(false);
       });
     return () => { cancelled = true; };
   }, [version.id]);
@@ -222,6 +248,47 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     }
   };
 
+  const runAgingSimulation = async () => {
+    setAgingLoading(true);
+    setHasRunSimulation(true);
+    try {
+      const data = await api.getAgingSimulation(version.id, simulationDays);
+      setAgingSimulation(data);
+    } catch (e) {
+      message.error('加速老化模拟失败');
+      setAgingSimulation(null);
+    } finally {
+      setAgingLoading(false);
+    }
+  };
+
+  const getRiskLevelColor = (level: string): string => {
+    switch (level) {
+      case '低风险': return '#52c41a';
+      case '中风险': return '#faad14';
+      case '高风险': return '#f5222d';
+      default: return '#8c8c8c';
+    }
+  };
+
+  const getCompatibilityLevelColor = (level: string): string => {
+    switch (level) {
+      case '相容': return '#52c41a';
+      case '轻微不相容': return '#faad14';
+      case '严重不相容': return '#f5222d';
+      default: return '#8c8c8c';
+    }
+  };
+
+  const getIngredientTypeColor = (type: string): string => {
+    switch (type) {
+      case '活性成分': return '#1890ff';
+      case '防腐剂': return '#722ed1';
+      case '基础原料': return '#8c8c8c';
+      default: return '#8c8c8c';
+    }
+  };
+
   const handleSimulatePercentageChange = (ingredientName: string, value: number | null) => {
     if (value === null || value === undefined) return;
     const newIngredients = simulateIngredients.map(item =>
@@ -248,6 +315,18 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
         value: item.cost
       }));
   }, [costBreakdown]);
+
+  const agingChartData = useMemo(() => {
+    if (!agingSimulation) return [];
+    return agingSimulation.items
+      .sort((a, b) => b.initial_percentage - a.initial_percentage)
+      .map(item => ({
+        name: item.ingredient_name,
+        初始含量: Number(item.initial_percentage.toFixed(2)),
+        残留含量: Number(item.residual_percentage.toFixed(2)),
+        类型: item.ingredient_type
+      }));
+  }, [agingSimulation]);
 
   const COLORS = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7', '#fa709a', '#fee140'];
 
@@ -917,6 +996,404 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     </Space>
   );
 
+  const renderStabilityTab = () => (
+    <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Card
+        size="small"
+        title={
+          <Space>
+            <SafetyOutlined style={{ color: '#1890ff' }} />
+            <span>稳定性风险评估</span>
+          </Space>
+        }
+        loading={stabilityLoading}
+      >
+        {stabilityRisk ? (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Row gutter={24}>
+              <Col span={8}>
+                <Card size="small" style={{ textAlign: 'center' }}>
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <Progress
+                      type="dashboard"
+                      percent={stabilityRisk.total_score}
+                      width={140}
+                      strokeColor={getRiskLevelColor(stabilityRisk.risk_level)}
+                      format={() => (
+                        <span style={{ fontSize: 28, fontWeight: 700, color: getRiskLevelColor(stabilityRisk.risk_level) }}>
+                          {stabilityRisk.total_score.toFixed(1)}
+                        </span>
+                      )}
+                    />
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <Tag
+                      color={getRiskLevelColor(stabilityRisk.risk_level)}
+                      style={{ fontSize: 16, padding: '4px 16px' }}
+                    >
+                      {stabilityRisk.risk_level}
+                    </Tag>
+                  </div>
+                  <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
+                    综合稳定性风险分
+                  </Text>
+                </Card>
+              </Col>
+              <Col span={8}>
+                <Card size="small" style={{ textAlign: 'center', height: '100%' }}>
+                  <Statistic
+                    title="风险成分对"
+                    value={stabilityRisk.risk_pairs.length}
+                    valueStyle={{ color: stabilityRisk.risk_pairs.length > 0 ? '#f5222d' : '#52c41a', fontSize: 32 }}
+                    suffix="对"
+                  />
+                  <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+                    存在相容性风险的组合
+                  </Text>
+                </Card>
+              </Col>
+              <Col span={8}>
+                <Card size="small" style={{ textAlign: 'center', height: '100%' }}>
+                  <Statistic
+                    title="累计扣分"
+                    value={stabilityRisk.total_deduction}
+                    precision={2}
+                    valueStyle={{ color: '#faad14', fontSize: 28 }}
+                  />
+                  <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+                    从满分100分中扣除
+                  </Text>
+                </Card>
+              </Col>
+            </Row>
+
+            {stabilityRisk.risk_pairs.length > 0 ? (
+              <div>
+                <Text strong>风险成分对详情（按扣分数降序）</Text>
+                <Table
+                  size="small"
+                  style={{ marginTop: 12 }}
+                  dataSource={stabilityRisk.risk_pairs.map((pair, idx) => ({ key: idx, ...pair }))}
+                  pagination={{ pageSize: 10 }}
+                  columns={[
+                    {
+                      title: '成分A',
+                      dataIndex: 'ingredient_a',
+                      key: 'ingredient_a',
+                      width: 140,
+                      render: (v: string, record: any) => (
+                        <Space direction="vertical" size={0}>
+                          <span style={{ fontWeight: 600 }}>{v}</span>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {record.percentage_a.toFixed(2)}%
+                          </Text>
+                        </Space>
+                      )
+                    },
+                    {
+                      title: '',
+                      key: 'vs',
+                      width: 40,
+                      align: 'center',
+                      render: () => <Text type="secondary">↔</Text>
+                    },
+                    {
+                      title: '成分B',
+                      dataIndex: 'ingredient_b',
+                      key: 'ingredient_b',
+                      width: 140,
+                      render: (v: string, record: any) => (
+                        <Space direction="vertical" size={0}>
+                          <span style={{ fontWeight: 600 }}>{v}</span>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {record.percentage_b.toFixed(2)}%
+                          </Text>
+                        </Space>
+                      )
+                    },
+                    {
+                      title: '相容性',
+                      dataIndex: 'compatibility_level',
+                      key: 'compatibility_level',
+                      width: 100,
+                      render: (v: string) => (
+                        <Tag color={getCompatibilityLevelColor(v)}>{v}</Tag>
+                      )
+                    },
+                    {
+                      title: '相容性分数',
+                      dataIndex: 'compatibility_score',
+                      key: 'compatibility_score',
+                      width: 100,
+                      align: 'center',
+                      render: (v: number) => (
+                        <span style={{
+                          fontFamily: 'monospace',
+                          color: getCompatibilityLevelColor(
+                            v >= 80 ? '相容' : v >= 50 ? '轻微不相容' : '严重不相容'
+                          ),
+                          fontWeight: 600
+                        }}>
+                          {v.toFixed(0)}/100
+                        </span>
+                      )
+                    },
+                    {
+                      title: '风险表现',
+                      dataIndex: 'manifestation',
+                      key: 'manifestation',
+                      ellipsis: true
+                    },
+                    {
+                      title: '扣分',
+                      dataIndex: 'deduction',
+                      key: 'deduction',
+                      width: 80,
+                      align: 'right',
+                      render: (v: number) => (
+                        <span style={{ color: '#f5222d', fontWeight: 600, fontFamily: 'monospace' }}>
+                          -{v.toFixed(2)}
+                        </span>
+                      )
+                    }
+                  ]}
+                />
+              </div>
+            ) : (
+              <Alert
+                type="success"
+                showIcon
+                message="恭喜！该配方未检测到已知的成分相容性风险"
+                description="所有成分对均符合已知相容性规则，配方理论稳定性良好。"
+              />
+            )}
+          </Space>
+        ) : (
+          <Empty description="暂无稳定性评估数据" />
+        )}
+      </Card>
+
+      <Card
+        size="small"
+        title={
+          <Space>
+            <ExperimentOutlined style={{ color: '#722ed1' }} />
+            <span>加速老化模拟</span>
+          </Space>
+        }
+      >
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Row gutter={24} align="middle">
+            <Col span={16}>
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Space>
+                  <Text strong>模拟天数：</Text>
+                  <Tag color="blue" style={{ fontSize: 14, padding: '2px 12px' }}>
+                    {simulationDays} 天
+                  </Tag>
+                </Space>
+                <Slider
+                  min={1}
+                  max={180}
+                  step={null}
+                  marks={{
+                    7: '7天',
+                    14: '14天',
+                    30: '30天',
+                    60: '60天',
+                    90: '90天',
+                    180: '180天'
+                  }}
+                  value={simulationDays}
+                  onChange={setSimulationDays}
+                />
+              </Space>
+            </Col>
+            <Col span={8}>
+              <Button
+                type="primary"
+                size="large"
+                icon={<ExperimentOutlined />}
+                onClick={runAgingSimulation}
+                loading={agingLoading}
+                block
+              >
+                开始模拟
+              </Button>
+            </Col>
+          </Row>
+
+          {hasRunSimulation && agingSimulation ? (
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Card size="small" style={{ textAlign: 'center' }}>
+                    <Statistic
+                      title="活性成分保留率"
+                      value={agingSimulation.overall_active_retention_rate}
+                      precision={1}
+                      suffix="%"
+                      valueStyle={{
+                        color: agingSimulation.overall_active_retention_rate >= 90 ? '#52c41a' :
+                               agingSimulation.overall_active_retention_rate >= 70 ? '#faad14' : '#f5222d',
+                        fontSize: 24
+                      }}
+                    />
+                  </Card>
+                </Col>
+                <Col span={8}>
+                  <Card size="small" style={{ textAlign: 'center' }}>
+                    <Statistic
+                      title="防腐剂保留率"
+                      value={agingSimulation.overall_preservative_retention_rate}
+                      precision={1}
+                      suffix="%"
+                      valueStyle={{
+                        color: agingSimulation.overall_preservative_retention_rate >= 90 ? '#52c41a' :
+                               agingSimulation.overall_preservative_retention_rate >= 70 ? '#faad14' : '#f5222d',
+                        fontSize: 24
+                      }}
+                    />
+                  </Card>
+                </Col>
+                <Col span={8}>
+                  <Card size="small" style={{ textAlign: 'center' }}>
+                    <Statistic
+                      title="基础原料保留率"
+                      value={agingSimulation.overall_base_retention_rate}
+                      precision={1}
+                      suffix="%"
+                      valueStyle={{ color: '#52c41a', fontSize: 24 }}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              <Alert
+                type="info"
+                showIcon
+                message="一级动力学衰减模型"
+                description="残留 = 初始 × e^(-k×天数)，k值：活性成分0.005/天，防腐剂0.003/天，基础原料0.001/天"
+              />
+
+              <Card title="各成分残留百分比对比" size="small">
+                <div style={{ width: '100%', height: 400 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={agingChartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 11 }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12 }}
+                        label={{ value: '百分比 (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
+                        domain={[0, 'auto']}
+                        tickFormatter={(v) => v.toFixed(1)}
+                      />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8 }}
+                        formatter={(value: any, name: any) => [
+                          `${Number(value).toFixed(2)}%`,
+                          name
+                        ]}
+                      />
+                      <Legend />
+                      <Bar dataKey="初始含量" fill="#667eea" name="初始含量 (%)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="残留含量" fill="#f5576c" name="模拟后残留 (%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              <Card title="详细降解数据" size="small">
+                <Table
+                  size="small"
+                  dataSource={agingSimulation.items.map((item, idx) => ({ key: idx, ...item }))}
+                  pagination={{ pageSize: 10 }}
+                  columns={[
+                    {
+                      title: '成分名称',
+                      dataIndex: 'ingredient_name',
+                      key: 'ingredient_name',
+                      width: 140
+                    },
+                    {
+                      title: '成分类型',
+                      dataIndex: 'ingredient_type',
+                      key: 'ingredient_type',
+                      width: 100,
+                      render: (v: string) => (
+                        <Tag color={getIngredientTypeColor(v)}>{v}</Tag>
+                      )
+                    },
+                    {
+                      title: '降解速率k',
+                      dataIndex: 'degradation_rate',
+                      key: 'degradation_rate',
+                      width: 100,
+                      align: 'right',
+                      render: (v: number) => (
+                        <span style={{ fontFamily: 'monospace' }}>{v.toFixed(3)}</span>
+                      )
+                    },
+                    {
+                      title: '初始含量',
+                      dataIndex: 'initial_percentage',
+                      key: 'initial_percentage',
+                      width: 100,
+                      align: 'right',
+                      render: (v: number) => (
+                        <span style={{ fontFamily: 'monospace' }}>{v.toFixed(2)}%</span>
+                      )
+                    },
+                    {
+                      title: '模拟后残留',
+                      dataIndex: 'residual_percentage',
+                      key: 'residual_percentage',
+                      width: 110,
+                      align: 'right',
+                      render: (v: number, record: any) => {
+                        const retention = (v / record.initial_percentage) * 100;
+                        return (
+                          <Space direction="vertical" size={0} align="end">
+                            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                            <Text type="secondary" style={{ fontSize: 11 }}>
+                              保留 {retention.toFixed(1)}%
+                            </Text>
+                          </Space>
+                        );
+                      }
+                    },
+                    {
+                      title: '降解量',
+                      dataIndex: 'degradation_amount',
+                      key: 'degradation_amount',
+                      width: 100,
+                      align: 'right',
+                      render: (v: number) => (
+                        <span style={{ color: '#f5222d', fontFamily: 'monospace', fontWeight: 600 }}>
+                          -{v.toFixed(2)}%
+                        </span>
+                      )
+                    }
+                  ]}
+                />
+              </Card>
+            </Space>
+          ) : hasRunSimulation ? (
+            <Empty description="模拟失败，请重试" />
+          ) : (
+            <Empty description="请选择模拟天数并点击「开始模拟」按钮" />
+          )}
+        </Space>
+      </Card>
+    </Space>
+  );
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <Card
@@ -962,6 +1439,11 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'cost',
               label: <span><DollarOutlined /> 成本分析</span>,
               children: renderCostTab()
+            },
+            {
+              key: 'stability',
+              label: <span><SafetyOutlined /> 稳定性</span>,
+              children: renderStabilityTab()
             }
           ]}
         />

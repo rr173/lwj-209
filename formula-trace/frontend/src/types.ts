@@ -173,3 +173,59 @@ export interface CostSimulateResponse {
   items: CostSimulateComparison[];
   missing_quotes: string[];
 }
+
+export interface IngredientTypeConfig {
+  id: number;
+  ingredient_name: string;
+  ingredient_type: string;
+  degradation_rate: number;
+}
+
+export interface CompatibilityRule {
+  id: number;
+  ingredient_a: string;
+  ingredient_b: string;
+  compatibility_level: string;
+  compatibility_score: number;
+  manifestation: string;
+  notes: string | null;
+}
+
+export interface RiskPairDetail {
+  ingredient_a: string;
+  ingredient_b: string;
+  percentage_a: number;
+  percentage_b: number;
+  compatibility_score: number;
+  compatibility_level: string;
+  manifestation: string;
+  deduction: number;
+}
+
+export interface StabilityRiskResponse {
+  version_id: number;
+  version_number: number;
+  total_score: number;
+  risk_level: string;
+  risk_pairs: RiskPairDetail[];
+  total_deduction: number;
+}
+
+export interface AgingSimulationItem {
+  ingredient_name: string;
+  initial_percentage: number;
+  ingredient_type: string;
+  degradation_rate: number;
+  residual_percentage: number;
+  degradation_amount: number;
+}
+
+export interface AgingSimulationResponse {
+  version_id: number;
+  version_number: number;
+  simulation_days: number;
+  items: AgingSimulationItem[];
+  overall_active_retention_rate: number;
+  overall_preservative_retention_rate: number;
+  overall_base_retention_rate: number;
+}

@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from sqlalchemy import select
 from database import async_session_maker
-from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote
+from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote, IngredientTypeConfig, CompatibilityRule
 
 
 async def seed_database():
@@ -200,5 +200,91 @@ async def seed_database():
                 valid_to=today + timedelta(days=365)
             )
             db.add(quote)
+
+        ingredient_types = [
+            {"name": "烟酰胺", "type": "活性成分"},
+            {"name": "维生素C糖苷", "type": "活性成分"},
+            {"name": "熊果苷", "type": "活性成分"},
+            {"name": "水杨酸", "type": "活性成分"},
+            {"name": "甘草酸二钾", "type": "活性成分"},
+            {"name": "红没药醇", "type": "活性成分"},
+            {"name": "泛醇", "type": "活性成分"},
+            {"name": "透明质酸钠", "type": "活性成分"},
+            {"name": "防腐剂", "type": "防腐剂"},
+            {"name": "去离子水", "type": "基础原料"},
+            {"name": "甘油", "type": "基础原料"},
+            {"name": "丙二醇", "type": "基础原料"},
+            {"name": "卡波姆", "type": "基础原料"},
+            {"name": "三乙醇胺", "type": "基础原料"},
+            {"name": "香精", "type": "基础原料"},
+        ]
+        for it in ingredient_types:
+            type_config = IngredientTypeConfig(
+                ingredient_name=it["name"],
+                ingredient_type=it["type"]
+            )
+            db.add(type_config)
+
+        compatibility_rules = [
+            {
+                "a": "维生素C糖苷", "b": "烟酰胺",
+                "level": "轻微不相容", "score": 70,
+                "manifestation": "PH值差异可能导致变色",
+                "notes": "建议控制PH在5.5-6.5之间"
+            },
+            {
+                "a": "水杨酸", "b": "烟酰胺",
+                "level": "严重不相容", "score": 30,
+                "manifestation": "形成烟酸导致皮肤刺激",
+                "notes": "已加入互斥组，禁止同时使用"
+            },
+            {
+                "a": "维生素C糖苷", "b": "熊果苷",
+                "level": "轻微不相容", "score": 75,
+                "manifestation": "抗氧化活性互相影响",
+                "notes": "建议添加稳定剂"
+            },
+            {
+                "a": "卡波姆", "b": "三乙醇胺",
+                "level": "相容", "score": 100,
+                "manifestation": "正常中和增稠",
+                "notes": "标准搭配，无冲突"
+            },
+            {
+                "a": "透明质酸钠", "b": "甘油",
+                "level": "相容", "score": 95,
+                "manifestation": "协同保湿",
+                "notes": "推荐搭配使用"
+            },
+            {
+                "a": "泛醇", "b": "透明质酸钠",
+                "level": "相容", "score": 98,
+                "manifestation": "协同修复",
+                "notes": "推荐搭配使用"
+            },
+            {
+                "a": "水杨酸", "b": "红没药醇",
+                "level": "相容", "score": 90,
+                "manifestation": "红没药醇缓解水杨酸刺激",
+                "notes": "推荐搭配，降低刺激性"
+            },
+            {
+                "a": "维生素C糖苷", "b": "透明质酸钠",
+                "level": "相容", "score": 92,
+                "manifestation": "透明质酸保护维C活性",
+                "notes": "推荐搭配"
+            },
+        ]
+        for cr in compatibility_rules:
+            a, b = sorted([cr["a"], cr["b"]])
+            rule = CompatibilityRule(
+                ingredient_a=a,
+                ingredient_b=b,
+                compatibility_level=cr["level"],
+                compatibility_score=cr["score"],
+                manifestation=cr["manifestation"],
+                notes=cr["notes"]
+            )
+            db.add(rule)
 
         await db.commit()

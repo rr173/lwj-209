@@ -247,3 +247,99 @@ class CostSimulateResponse(BaseModel):
     delta_percentage: float
     items: list[CostSimulateComparison]
     missing_quotes: list[str]
+
+
+class IngredientTypeConfigCreate(BaseModel):
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+    ingredient_type: str = Field(..., pattern="^(活性成分|防腐剂|基础原料)$")
+
+
+class IngredientTypeConfigResponse(BaseModel):
+    id: int
+    ingredient_name: str
+    ingredient_type: str
+    degradation_rate: float
+
+    class Config:
+        from_attributes = True
+
+
+class CompatibilityRuleCreate(BaseModel):
+    ingredient_a: str = Field(..., min_length=1, max_length=200)
+    ingredient_b: str = Field(..., min_length=1, max_length=200)
+    compatibility_level: str = Field(..., pattern="^(相容|轻微不相容|严重不相容)$")
+    compatibility_score: float = Field(..., ge=0, le=100)
+    manifestation: str = Field(..., min_length=1, max_length=200)
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class CompatibilityRuleUpdate(BaseModel):
+    compatibility_level: Optional[str] = Field(None, pattern="^(相容|轻微不相容|严重不相容)$")
+    compatibility_score: Optional[float] = Field(None, ge=0, le=100)
+    manifestation: Optional[str] = Field(None, min_length=1, max_length=200)
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class CompatibilityRuleResponse(BaseModel):
+    id: int
+    ingredient_a: str
+    ingredient_b: str
+    compatibility_level: str
+    compatibility_score: float
+    manifestation: str
+    notes: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class CompatibilityListItem(BaseModel):
+    other_ingredient: str
+    compatibility_level: str
+    compatibility_score: float
+    manifestation: str
+    notes: Optional[str]
+
+
+class CompatibilityListResponse(BaseModel):
+    ingredient_name: str
+    relations: list[CompatibilityListItem]
+
+
+class RiskPairDetail(BaseModel):
+    ingredient_a: str
+    ingredient_b: str
+    percentage_a: float
+    percentage_b: float
+    compatibility_score: float
+    compatibility_level: str
+    manifestation: str
+    deduction: float
+
+
+class StabilityRiskResponse(BaseModel):
+    version_id: int
+    version_number: int
+    total_score: float
+    risk_level: str
+    risk_pairs: list[RiskPairDetail]
+    total_deduction: float
+
+
+class AgingSimulationItem(BaseModel):
+    ingredient_name: str
+    initial_percentage: float
+    ingredient_type: str
+    degradation_rate: float
+    residual_percentage: float
+    degradation_amount: float
+
+
+class AgingSimulationResponse(BaseModel):
+    version_id: int
+    version_number: int
+    simulation_days: int
+    items: list[AgingSimulationItem]
+    overall_active_retention_rate: float
+    overall_preservative_retention_rate: float
+    overall_base_retention_rate: float

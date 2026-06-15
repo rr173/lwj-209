@@ -13,7 +13,9 @@ import type {
   SupplierQuoteCreate,
   CostBreakdownResponse,
   CostSimulateResponse,
-  CostSimulateItem
+  CostSimulateItem,
+  StabilityRiskResponse,
+  AgingSimulationResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -72,6 +74,12 @@ export const api = {
       version_id: versionId,
       ingredients
     }).then(r => r.data),
+
+  getStabilityRisk: (versionId: number): Promise<StabilityRiskResponse> =>
+    axios.get(`${API_BASE}/stability/risk-assessment/${versionId}`).then(r => r.data),
+
+  getAgingSimulation: (versionId: number, days: number): Promise<AgingSimulationResponse> =>
+    axios.get(`${API_BASE}/stability/aging-simulation/${versionId}`, { params: { days } }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

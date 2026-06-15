@@ -85,3 +85,37 @@ class SupplierQuote(Base):
     def is_active(self) -> bool:
         today = date.today()
         return self.valid_from <= today <= self.valid_to
+
+
+class IngredientTypeConfig(Base):
+    __tablename__ = "ingredient_type_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
+    ingredient_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    @property
+    def degradation_rate(self) -> float:
+        rate_map = {
+            "活性成分": 0.005,
+            "防腐剂": 0.003,
+            "基础原料": 0.001
+        }
+        return rate_map.get(self.ingredient_type, 0.001)
+
+
+class CompatibilityRule(Base):
+    __tablename__ = "compatibility_rules"
+    __table_args__ = (
+        UniqueConstraint("ingredient_a", "ingredient_b", name="unique_ingredient_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ingredient_a: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    ingredient_b: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    compatibility_level: Mapped[str] = mapped_column(String(50), nullable=False)
+    compatibility_score: Mapped[float] = mapped_column(Float, nullable=False)
+    manifestation: Mapped[str] = mapped_column(String(200), nullable=False)
+    notes: Mapped[str] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
