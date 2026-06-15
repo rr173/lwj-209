@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic } from 'antd';
 import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse } from '../types';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode } from '../types';
 import { getScoreColor, api } from '../api';
 
 const { Title, Text } = Typography;
@@ -11,10 +11,11 @@ interface Props {
   version: FormulaVersion;
   batches: Batch[];
   allBatches: Batch[];
+  versionTree: VersionTreeNode[];
   onVersionCreated?: () => void;
 }
 
-export default function VersionDetail({ version, batches, allBatches, onVersionCreated }: Props) {
+export default function VersionDetail({ version, batches, allBatches, versionTree, onVersionCreated }: Props) {
   const [traceModalVisible, setTraceModalVisible] = useState(false);
   const [traceData, setTraceData] = useState<any>(null);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
@@ -32,15 +33,38 @@ export default function VersionDetail({ version, batches, allBatches, onVersionC
 
   const [recommendData, setrecommendData] = useState<FormulaRecommendationResponse | null>(null);
   const [recommendLoading, setrecommendLoading] = useState(false);
+  const [allProductLineIngredients, setAllProductLineIngredients] = useState<string[]>([]);
+  const [ingredientsLoading, setIngredientsLoading] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
 
+  useEffect(() => {
+    let cancelled = false;
+    setIngredientsLoading(true);
+    api.getProductLineIngredients(version.product_line_id)
+      .then(data => {
+        if (!cancelled) {
+          setAllProductLineIngredients(data.ingredients);
+        }
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载成分列表失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIngredientsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.product_line_id]);
+
   const ingredientOptions = useMemo(() => {
     const names = new Set<string>();
+    allProductLineIngredients.forEach(name => names.add(name));
     version.ingredients.forEach(ing => names.add(ing.name));
-    return Array.from(names).map(name => ({ label: name, value: name }));
-  }, [version.ingredients]);
+    return Array.from(names).sort().map(name => ({ label: name, value: name }));
+  }, [allProductLineIngredients, version.ingredients]);
 
   useEffect(() => {
     if (ingredientOptions.length > 0 && !selectedIngredient) {
@@ -639,7 +663,7 @@ export default function VersionDetail({ version, batches, allBatches, onVersionC
         onCancel={() => setCreateBatchVisible(false)}
         onOk={() => form.submit()}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFinish={handleCreateBatch}>
           <Form.Item name="production_date" label="生产日期" rules={[{ required: true }]}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
@@ -655,7 +679,7 @@ export default function VersionDetail({ version, batches, allBatches, onVersionC
         onCancel={() => setSubmitResultVisible(false)}
         onOk={() => resultForm.submit()}
       >
-        <Form form={resultForm} layout="vertical">
+        <Form form={resultForm} layout="vertical" onFinish={handleSubmitResult}>
           <Form.Item name="skin_feel_score" label="肤感评分(1-10)" rules={[{ required: true }]}>
             <InputNumber min={1} max={10} step={0.1} style={{ width: '100%' }} />
           </Form.Item>
@@ -883,17 +907,17 @@ export default function VersionDetail({ version, batches, allBatches, onVersionC
                   title: '调整',
                   dataIndex: 'adjustment',
                   key: 'adjustment',
-                  width: 70,
+                  width: 80,
                   align: 'center',
                   render: (v: string, record: any) => {
-                    const color = v === '涨' ? 'green' : v === '降' ? 'red' : 'default';
+                    const color = v === '涨' ? 'green' : (v === '降' || v === '移除') ? 'red' : 'default';
                     const delta = round2(record.recommended_percentage - record.original_percentage);
                     const sign = delta > 0 ? '+' : '';
                     return (
                       <Space direction="vertical" size={2} align="center">
                         <Tag color={color} style={{ margin: 0 }}>{v}</Tag>
                         {delta !== 0 && (
-                          <Text style={{ fontSize: 11, color: delta > 0 ? '#52c41a' : '#f5222d' }}>
+                          <Text style={{ fontSize: 11, color: delta > 0 ? '#52c41a' : '#f5222d', fontWeight: 600 }}>
                             {sign}{delta.toFixed(2)}%
                           </Text>
                         )}
@@ -933,7 +957,7 @@ export default function VersionDetail({ version, batches, allBatches, onVersionC
               fontWeight: 600
             }}>
               <span style={{ color: '#52c41a' }}>
-                推荐配方合计：{recommendData.recommended_ingredients.reduce((s, i) => s + i.recommended_percentage, 0).toFixed(2)}% ✓
+                推荐配方合计：{recommendData.recommended_ingredients.filter(i => i.recommended_percentage > 0).reduce((s, i) => s + i.recommended_percentage, 0).toFixed(2)}% ✓
               </span>
             </div>
           </Space>

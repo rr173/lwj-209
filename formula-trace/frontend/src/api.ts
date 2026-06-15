@@ -7,7 +7,8 @@ import type {
   TracePathResponse,
   CompareResponse,
   IngredientTrendResponse,
-  FormulaRecommendationResponse
+  FormulaRecommendationResponse,
+  ProductLineIngredientsResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -41,6 +42,11 @@ export const api = {
 
   getFormulaRecommendation: (productLineId: number): Promise<FormulaRecommendationResponse> =>
     axios.get(`${API_BASE}/analytics/recommend-formula`, {
+      params: { product_line_id: productLineId }
+    }).then(r => r.data),
+
+  getProductLineIngredients: (productLineId: number): Promise<ProductLineIngredientsResponse> =>
+    axios.get(`${API_BASE}/analytics/product-line-ingredients`, {
       params: { product_line_id: productLineId }
     }).then(r => r.data),
 };

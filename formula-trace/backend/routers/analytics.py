@@ -240,36 +240,52 @@ async def recommend_formula(
             "correlation": corr,
             "reason": f"{'强正相关' if corr > 0 else '强负相关'}，相关系数={corr:.4f}，{'增加' if direction > 0 else '减少'}{delta_pct:.2f}%"
         }
-        if tentative_pct > 0:
+        if tentative_pct > 0 or ing_name in final_ingredients:
             final_ingredients[ing_name] = tentative_pct
-        elif ing_name in final_ingredients:
-            del final_ingredients[ing_name]
 
-    total = sum(final_ingredients.values())
+    total = sum(v for v in final_ingredients.values() if v > 0)
     if abs(total) < 0.0001:
         raise HTTPException(status_code=400, detail="调整后成分总和为0，无法归一化")
 
     normalized = {}
     for name, pct in final_ingredients.items():
-        normalized[name] = round(pct * 100.0 / total, 2)
+        if pct > 0:
+            normalized[name] = round(pct * 100.0 / total, 2)
+        else:
+            normalized[name] = 0.0
 
-    rounding_diff = round(100.0 - sum(normalized.values()), 2)
-    if abs(rounding_diff) > 0:
-        max_name = max(normalized, key=lambda k: normalized[k])
+    non_zero_normalized = {k: v for k, v in normalized.items() if v > 0}
+    rounding_diff = round(100.0 - sum(non_zero_normalized.values()), 2)
+    if abs(rounding_diff) > 0 and non_zero_normalized:
+        max_name = max(non_zero_normalized, key=lambda k: non_zero_normalized[k])
         normalized[max_name] = round(normalized[max_name] + rounding_diff, 2)
 
+    all_names = set()
+    for name in base_ingredients.keys():
+        all_names.add(name)
+    for name in normalized.keys():
+        all_names.add(name)
+    for name in adjustments.keys():
+        all_names.add(name)
+
     recommended = []
-    for name in sorted(normalized.keys()):
+    for name in sorted(all_names):
         orig_pct = base_ingredients.get(name, 0.0)
-        rec_pct = normalized[name]
+        rec_pct = normalized.get(name, 0.0)
         if name in adjustments:
             adj_info = adjustments[name]
             adjustment = adj_info["adjustment"]
             corr = adj_info["correlation"]
             reason = adj_info["reason"]
+            if rec_pct == 0 and orig_pct > 0:
+                adjustment = "移除"
+                reason = adj_info["reason"] + "，已从配方中移除"
         else:
             diff = round(rec_pct - orig_pct, 2)
-            if abs(diff) < 0.01:
+            if rec_pct == 0 and orig_pct > 0:
+                adjustment = "移除"
+                reason = f"归一化调整，从配方中移除（原占比{orig_pct:.2f}%）"
+            elif abs(diff) < 0.01:
                 adjustment = "不变"
                 reason = "无显著相关性，保持不变"
             elif diff > 0:
@@ -297,3 +313,28 @@ async def recommend_formula(
         recommended_ingredients=recommended,
         notes=notes
     )
+
+
+@router.get("/product-line-ingredients")
+async def get_product_line_ingredients(
+    product_line_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    pl_result = await db.execute(select(ProductLine).where(ProductLine.id == product_line_id))
+    if not pl_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="产品线不存在")
+
+    versions_result = await db.execute(
+        select(FormulaVersion).where(FormulaVersion.product_line_id == product_line_id)
+    )
+    all_versions = versions_result.scalars().all()
+
+    all_ingredient_names = set()
+    for v in all_versions:
+        for ing in v.ingredients:
+            all_ingredient_names.add(ing["name"])
+
+    return {
+        "product_line_id": product_line_id,
+        "ingredients": sorted(list(all_ingredient_names))
+    }

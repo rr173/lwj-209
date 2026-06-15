@@ -197,6 +197,7 @@ function App() {
               version={selectedVersion}
               batches={allBatches.filter(b => b.version_id === selectedVersion.id)}
               allBatches={allBatches}
+              versionTree={versionTree}
             />
           ) : (
             <div style={{ textAlign: 'center', color: '#999', padding: 100 }}>

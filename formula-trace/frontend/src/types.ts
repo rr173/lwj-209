@@ -107,3 +107,8 @@ export interface FormulaRecommendationResponse {
   recommended_ingredients: RecommendedIngredient[];
   notes: string[];
 }
+
+export interface ProductLineIngredientsResponse {
+  product_line_id: number;
+  ingredients: string[];
+}
