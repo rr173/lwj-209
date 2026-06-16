@@ -168,7 +168,14 @@ async def simulate_cost(data: CostSimulateRequest, db: AsyncSession = Depends(ge
     original_ing_map = {ing["name"]: ing["percentage"] for ing in version.ingredients}
     new_ing_map = {ing.name: ing.percentage for ing in data.ingredients}
 
-    all_names = sorted(set(original_ing_map.keys()) | set(new_ing_map.keys()))
+    for name in new_ing_map.keys():
+        if name not in original_ing_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"成分「{name}」不存在于当前配方中，无法进行成本模拟"
+            )
+
+    all_names = sorted(original_ing_map.keys())
 
     items = []
     missing_quotes = []
@@ -176,8 +183,8 @@ async def simulate_cost(data: CostSimulateRequest, db: AsyncSession = Depends(ge
     new_total = 0.0
 
     for name in all_names:
-        original_pct = original_ing_map.get(name, 0.0)
-        new_pct = new_ing_map.get(name, 0.0)
+        original_pct = original_ing_map[name]
+        new_pct = new_ing_map.get(name, original_pct)
 
         best_quote = await get_best_price_for_ingredient(db, name)
         has_quote = best_quote is not None

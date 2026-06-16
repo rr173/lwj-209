@@ -57,6 +57,65 @@ async def list_inventories(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.get("/warnings", response_model=PurchaseWarningResponse)
+async def get_purchase_warnings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(IngredientInventory).order_by(IngredientInventory.ingredient_name))
+    inventories = result.scalars().all()
+
+    items: list[PurchaseWarningItem] = []
+    urgent_count = 0
+    warning_count = 0
+    normal_count = 0
+
+    for inv in inventories:
+        avg_daily = await calculate_average_daily_consumption(db, inv.ingredient_name)
+
+        estimated_days: float | None = None
+        if avg_daily and avg_daily > 0 and inv.current_quantity > 0:
+            estimated_days = inv.current_quantity / avg_daily
+
+        shortage = max(0.0, inv.safety_stock - inv.current_quantity)
+
+        if estimated_days is not None:
+            if estimated_days < 7:
+                warning_level = "urgent"
+                urgent_count += 1
+            elif estimated_days < 14:
+                warning_level = "warning"
+                warning_count += 1
+            else:
+                warning_level = "normal"
+                normal_count += 1
+        else:
+            if inv.current_quantity < inv.safety_stock:
+                warning_level = "urgent"
+                urgent_count += 1
+            else:
+                warning_level = "normal"
+                normal_count += 1
+
+        items.append(
+            PurchaseWarningItem(
+                id=inv.id,
+                ingredient_name=inv.ingredient_name,
+                current_quantity=inv.current_quantity,
+                safety_stock=inv.safety_stock,
+                storage_location=inv.storage_location,
+                average_daily_consumption=round(avg_daily, 4) if avg_daily else None,
+                estimated_days_left=round(estimated_days, 1) if estimated_days else None,
+                warning_level=warning_level,
+                shortage_amount=round(shortage, 4),
+            )
+        )
+
+    return PurchaseWarningResponse(
+        urgent_count=urgent_count,
+        warning_count=warning_count,
+        normal_count=normal_count,
+        items=items,
+    )
+
+
 @router.get("/{inventory_id}", response_model=InventoryWithTransactionsResponse)
 async def get_inventory(inventory_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(IngredientInventory).where(IngredientInventory.id == inventory_id))
@@ -240,62 +299,3 @@ async def calculate_average_daily_consumption(
             return total_consumption / date_range
 
     return total_consumption / 7.0
-
-
-@router.get("/warnings", response_model=PurchaseWarningResponse)
-async def get_purchase_warnings(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(IngredientInventory).order_by(IngredientInventory.ingredient_name))
-    inventories = result.scalars().all()
-
-    items: list[PurchaseWarningItem] = []
-    urgent_count = 0
-    warning_count = 0
-    normal_count = 0
-
-    for inv in inventories:
-        avg_daily = await calculate_average_daily_consumption(db, inv.ingredient_name)
-
-        estimated_days: float | None = None
-        if avg_daily and avg_daily > 0 and inv.current_quantity > 0:
-            estimated_days = inv.current_quantity / avg_daily
-
-        shortage = max(0.0, inv.safety_stock - inv.current_quantity)
-
-        if estimated_days is not None:
-            if estimated_days < 7:
-                warning_level = "urgent"
-                urgent_count += 1
-            elif estimated_days < 14:
-                warning_level = "warning"
-                warning_count += 1
-            else:
-                warning_level = "normal"
-                normal_count += 1
-        else:
-            if inv.current_quantity < inv.safety_stock:
-                warning_level = "urgent"
-                urgent_count += 1
-            else:
-                warning_level = "normal"
-                normal_count += 1
-
-        items.append(
-            PurchaseWarningItem(
-                id=inv.id,
-                ingredient_name=inv.ingredient_name,
-                current_quantity=inv.current_quantity,
-                safety_stock=inv.safety_stock,
-                storage_location=inv.storage_location,
-                average_daily_consumption=round(avg_daily, 4) if avg_daily else None,
-                estimated_days_left=round(estimated_days, 1) if estimated_days else None,
-                warning_level=warning_level,
-                shortage_amount=round(shortage, 4),
-            )
-        )
-
-    return PurchaseWarningResponse(
-        urgent_count=urgent_count,
-        warning_count=warning_count,
-        normal_count=normal_count,
-        items=items,
-    )
