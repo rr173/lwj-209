@@ -373,3 +373,78 @@ class ApprovalRecordResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class IngredientInventoryCreate(BaseModel):
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+    current_quantity: float = Field(..., ge=0)
+    safety_stock: float = Field(..., ge=0)
+    storage_location: Optional[str] = Field(None, max_length=200)
+
+
+class IngredientInventoryUpdate(BaseModel):
+    current_quantity: Optional[float] = Field(None, ge=0)
+    safety_stock: Optional[float] = Field(None, ge=0)
+    storage_location: Optional[str] = Field(None, max_length=200)
+
+
+class IngredientInventoryResponse(BaseModel):
+    id: int
+    ingredient_name: str
+    current_quantity: float
+    safety_stock: float
+    storage_location: Optional[str]
+    stock_status: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class StockInRequest(BaseModel):
+    quantity: float = Field(..., gt=0)
+    batch_number: Optional[str] = Field(None, max_length=50)
+    remark: Optional[str] = Field(None, max_length=500)
+
+
+class StockOutRequest(BaseModel):
+    quantity: float = Field(..., gt=0)
+    batch_number: Optional[str] = Field(None, max_length=50)
+    remark: Optional[str] = Field(None, max_length=500)
+
+
+class InventoryTransactionResponse(BaseModel):
+    id: int
+    inventory_id: int
+    transaction_type: str
+    quantity: float
+    batch_number: Optional[str]
+    remark: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InventoryWithTransactionsResponse(IngredientInventoryResponse):
+    recent_transactions: list[InventoryTransactionResponse]
+
+
+class PurchaseWarningItem(BaseModel):
+    id: int
+    ingredient_name: str
+    current_quantity: float
+    safety_stock: float
+    storage_location: Optional[str]
+    average_daily_consumption: float | None
+    estimated_days_left: float | None
+    warning_level: str
+    shortage_amount: float
+
+
+class PurchaseWarningResponse(BaseModel):
+    urgent_count: int
+    warning_count: int
+    normal_count: int
+    items: list[PurchaseWarningItem]

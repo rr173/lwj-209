@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from sqlalchemy import select
 from database import async_session_maker
-from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote, IngredientTypeConfig, CompatibilityRule
+from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote, IngredientTypeConfig, CompatibilityRule, IngredientInventory, InventoryTransaction
 
 
 async def seed_database():
@@ -291,5 +291,42 @@ async def seed_database():
                 notes=cr["notes"]
             )
             db.add(rule)
+
+        initial_inventories = [
+            {"name": "去离子水", "current": 200.0, "safety": 100.0, "location": "A区-储水罐"},
+            {"name": "甘油", "current": 25.0, "safety": 20.0, "location": "B区-原料架1"},
+            {"name": "丙二醇", "current": 18.0, "safety": 15.0, "location": "B区-原料架1"},
+            {"name": "烟酰胺", "current": 3.5, "safety": 5.0, "location": "C区-活性原料柜"},
+            {"name": "透明质酸钠", "current": 0.8, "safety": 1.0, "location": "C区-活性原料柜"},
+            {"name": "维生素C糖苷", "current": 1.2, "safety": 2.0, "location": "C区-活性原料柜"},
+            {"name": "卡波姆", "current": 0.5, "safety": 1.0, "location": "B区-原料架2"},
+            {"name": "三乙醇胺", "current": 0.8, "safety": 1.0, "location": "B区-原料架2"},
+            {"name": "防腐剂", "current": 0.3, "safety": 0.5, "location": "D区-危险品柜"},
+            {"name": "香精", "current": 0.2, "safety": 0.3, "location": "D区-危险品柜"},
+            {"name": "熊果苷", "current": 0.6, "safety": 1.0, "location": "C区-活性原料柜"},
+            {"name": "泛醇", "current": 0.4, "safety": 0.5, "location": "C区-活性原料柜"},
+            {"name": "水杨酸", "current": 0.3, "safety": 1.0, "location": "D区-危险品柜"},
+            {"name": "甘草酸二钾", "current": 0.2, "safety": 0.5, "location": "C区-活性原料柜"},
+            {"name": "红没药醇", "current": 0.1, "safety": 0.3, "location": "C区-活性原料柜"},
+        ]
+
+        for inv_data in initial_inventories:
+            inv = IngredientInventory(
+                ingredient_name=inv_data["name"],
+                current_quantity=inv_data["current"],
+                safety_stock=inv_data["safety"],
+                storage_location=inv_data["location"],
+            )
+            db.add(inv)
+            await db.flush()
+
+            if inv_data["current"] > 0:
+                tx = InventoryTransaction(
+                    inventory_id=inv.id,
+                    transaction_type="stock_in",
+                    quantity=inv_data["current"],
+                    remark="初始库存",
+                )
+                db.add(tx)
 
         await db.commit()

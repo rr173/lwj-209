@@ -17,7 +17,15 @@ import type {
   StabilityRiskResponse,
   AgingSimulationResponse,
   CompatibilityListItem,
-  ApprovalRecord
+  ApprovalRecord,
+  IngredientInventory,
+  InventoryWithTransactions,
+  InventoryTransaction,
+  PurchaseWarningResponse,
+  IngredientInventoryCreate,
+  IngredientInventoryUpdate,
+  StockInRequest,
+  StockOutRequest,
 } from './types';
 
 const API_BASE = '/api';
@@ -102,6 +110,33 @@ export const api = {
 
   getApprovalHistory: (versionId: number): Promise<ApprovalRecord[]> =>
     axios.get(`${API_BASE}/approvals/${versionId}/history`).then(r => r.data),
+
+  getInventories: (): Promise<IngredientInventory[]> =>
+    axios.get(`${API_BASE}/inventory`).then(r => r.data),
+
+  getInventory: (inventoryId: number): Promise<InventoryWithTransactions> =>
+    axios.get(`${API_BASE}/inventory/${inventoryId}`).then(r => r.data),
+
+  createInventory: (data: IngredientInventoryCreate): Promise<IngredientInventory> =>
+    axios.post(`${API_BASE}/inventory`, data).then(r => r.data),
+
+  updateInventory: (inventoryId: number, data: IngredientInventoryUpdate): Promise<IngredientInventory> =>
+    axios.put(`${API_BASE}/inventory/${inventoryId}`, data).then(r => r.data),
+
+  deleteInventory: (inventoryId: number): Promise<void> =>
+    axios.delete(`${API_BASE}/inventory/${inventoryId}`).then(r => r.data),
+
+  stockIn: (inventoryId: number, data: StockInRequest): Promise<IngredientInventory> =>
+    axios.post(`${API_BASE}/inventory/${inventoryId}/stock-in`, data).then(r => r.data),
+
+  stockOut: (inventoryId: number, data: StockOutRequest): Promise<IngredientInventory> =>
+    axios.post(`${API_BASE}/inventory/${inventoryId}/stock-out`, data).then(r => r.data),
+
+  getInventoryTransactions: (inventoryId: number, days: number = 30): Promise<InventoryTransaction[]> =>
+    axios.get(`${API_BASE}/inventory/${inventoryId}/transactions`, { params: { days } }).then(r => r.data),
+
+  getPurchaseWarnings: (): Promise<PurchaseWarningResponse> =>
+    axios.get(`${API_BASE}/inventory/warnings`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

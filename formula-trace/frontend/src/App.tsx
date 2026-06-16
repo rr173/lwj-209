@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Layout, Space, Button, Select, Modal, message, Input } from 'antd';
-import { ReloadOutlined, BarChartOutlined, SearchOutlined } from '@ant-design/icons';
+import { Layout, Menu, Space, Button, Select, Modal, message, Input, Typography } from 'antd';
+import { ReloadOutlined, BarChartOutlined, SearchOutlined, DatabaseOutlined, HomeOutlined } from '@ant-design/icons';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import type { ProductLine, VersionTreeNode, FormulaVersion, Batch, TracePathResponse } from './types';
 import { api, collectVersionIds } from './api';
 import VersionTree from './components/VersionTree';
 import VersionDetail from './components/VersionDetail';
 import CompareModal from './components/CompareModal';
 import TraceModal from './components/TraceModal';
+import InventoryPage from './components/InventoryPage';
 
 const { Header, Content, Sider } = Layout;
+const { Title } = Typography;
 
-function App() {
+function FormulaPage() {
+  const navigate = useNavigate();
   const [productLines, setProductLines] = useState<ProductLine[]>([]);
   const [selectedProductLine, setSelectedProductLine] = useState<number | null>(null);
   const [versionTree, setVersionTree] = useState<VersionTreeNode[]>([]);
@@ -22,6 +26,12 @@ function App() {
   const [traceBatchNumber, setTraceBatchNumber] = useState('');
   const [traceData, setTraceData] = useState<TracePathResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const location = useLocation();
+
+  const menuItems = [
+    { key: '/', icon: <HomeOutlined />, label: '配方管理' },
+    { key: '/inventory', icon: <DatabaseOutlined />, label: '库存管理' },
+  ];
 
   useEffect(() => {
     loadProductLines();
@@ -136,10 +146,19 @@ function App() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header className="app-header">
-        <Space direction="vertical" size={0}>
-          <h1>化妆品配方版本管理与批次追溯系统</h1>
-          <div className="subtitle">Formula Version Management & Batch Traceability System</div>
+      <Header className="app-header" style={{ padding: '0 24px' }}>
+        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+          <Space>
+            <h1 style={{ color: 'white', margin: 0, fontSize: 20 }}>化妆品配方版本管理与批次追溯系统</h1>
+          </Space>
+          <Menu
+            theme="dark"
+            mode="horizontal"
+            selectedKeys={[location.pathname]}
+            items={menuItems}
+            onClick={({ key }) => navigate(key as string)}
+            style={{ minWidth: 300, background: 'transparent' }}
+          />
         </Space>
       </Header>
       <Layout style={{ padding: '20px' }}>
@@ -244,6 +263,17 @@ function App() {
         }}
       />
     </Layout>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<FormulaPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

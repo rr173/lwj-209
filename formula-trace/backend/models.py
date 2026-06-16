@@ -134,3 +134,37 @@ class CompatibilityRule(Base):
     manifestation: Mapped[str] = mapped_column(String(200), nullable=False)
     notes: Mapped[str] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+
+class IngredientInventory(Base):
+    __tablename__ = "ingredient_inventories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
+    current_quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    safety_stock: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    storage_location: Mapped[str] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)
+
+    transactions = relationship("InventoryTransaction", back_populates="inventory", cascade="all, delete-orphan")
+
+    @property
+    def stock_status(self) -> str:
+        if self.current_quantity < self.safety_stock:
+            return "urgent"
+        return "normal"
+
+
+class InventoryTransaction(Base):
+    __tablename__ = "inventory_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    inventory_id: Mapped[int] = mapped_column(Integer, ForeignKey("ingredient_inventories.id"), nullable=False)
+    transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    batch_number: Mapped[str] = mapped_column(String(50), nullable=True)
+    remark: Mapped[str] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    inventory = relationship("IngredientInventory", back_populates="transactions")

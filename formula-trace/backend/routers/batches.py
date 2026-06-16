@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
 from database import get_db
-from models import Batch, FormulaVersion, ProductLine
+from models import Batch, FormulaVersion, ProductLine, IngredientInventory, InventoryTransaction
 from schemas import BatchCreate, BatchTestResult, BatchResponse, TracePathResponse, TraceDiff, IngredientItem
 from utils import compute_batch_scores
 
@@ -25,6 +25,22 @@ async def create_batch(data: BatchCreate, db: AsyncSession = Depends(get_db)):
     if version.approval_status != "published":
         raise HTTPException(status_code=400, detail=f"只有已发布的版本才能创建试产批次，当前状态为「{version.approval_status}」")
 
+    consumption_map: dict[str, float] = {}
+    for ing in version.ingredients:
+        consumption = data.production_amount * (ing["percentage"] / 100.0)
+        consumption_map[ing["name"]] = consumption
+
+    for ing_name, qty in consumption_map.items():
+        inv_result = await db.execute(
+            select(IngredientInventory).where(IngredientInventory.ingredient_name == ing_name)
+        )
+        inventory = inv_result.scalar_one_or_none()
+        if inventory and inventory.current_quantity < qty:
+            raise HTTPException(
+                status_code=400,
+                detail=f"原料「{ing_name}」库存不足：当前库存 {inventory.current_quantity:.4f} kg，需要 {qty:.4f} kg",
+            )
+
     count_result = await db.execute(
         select(func.count(Batch.id)).where(Batch.version_id == data.version_id)
     )
@@ -38,6 +54,24 @@ async def create_batch(data: BatchCreate, db: AsyncSession = Depends(get_db)):
         production_amount=data.production_amount
     )
     db.add(batch)
+    await db.flush()
+
+    for ing_name, qty in consumption_map.items():
+        inv_result = await db.execute(
+            select(IngredientInventory).where(IngredientInventory.ingredient_name == ing_name)
+        )
+        inventory = inv_result.scalar_one_or_none()
+        if inventory:
+            inventory.current_quantity -= qty
+            transaction = InventoryTransaction(
+                inventory_id=inventory.id,
+                transaction_type="stock_out",
+                quantity=qty,
+                batch_number=batch_number,
+                remark=f"试产批次 {batch_number} 生产消耗",
+            )
+            db.add(transaction)
+
     await db.commit()
     await db.refresh(batch)
     return BatchResponse(

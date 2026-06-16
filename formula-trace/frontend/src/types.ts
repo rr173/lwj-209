@@ -251,3 +251,72 @@ export interface ApprovalRecord {
 }
 
 export type ApprovalStatus = 'draft' | 'pending' | 'published' | 'rejected';
+
+export interface IngredientInventory {
+  id: number;
+  ingredient_name: string;
+  current_quantity: number;
+  safety_stock: number;
+  storage_location: string | null;
+  stock_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryTransaction {
+  id: number;
+  inventory_id: number;
+  transaction_type: 'stock_in' | 'stock_out';
+  quantity: number;
+  batch_number: string | null;
+  remark: string | null;
+  created_at: string;
+}
+
+export interface InventoryWithTransactions extends IngredientInventory {
+  recent_transactions: InventoryTransaction[];
+}
+
+export interface PurchaseWarningItem {
+  id: number;
+  ingredient_name: string;
+  current_quantity: number;
+  safety_stock: number;
+  storage_location: string | null;
+  average_daily_consumption: number | null;
+  estimated_days_left: number | null;
+  warning_level: 'urgent' | 'warning' | 'normal';
+  shortage_amount: number;
+}
+
+export interface PurchaseWarningResponse {
+  urgent_count: number;
+  warning_count: number;
+  normal_count: number;
+  items: PurchaseWarningItem[];
+}
+
+export interface IngredientInventoryCreate {
+  ingredient_name: string;
+  current_quantity: number;
+  safety_stock: number;
+  storage_location?: string | null;
+}
+
+export interface IngredientInventoryUpdate {
+  current_quantity?: number | null;
+  safety_stock?: number | null;
+  storage_location?: string | null;
+}
+
+export interface StockInRequest {
+  quantity: number;
+  batch_number?: string | null;
+  remark?: string | null;
+}
+
+export interface StockOutRequest {
+  quantity: number;
+  batch_number?: string | null;
+  remark?: string | null;
+}
