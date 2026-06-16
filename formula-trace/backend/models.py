@@ -168,3 +168,53 @@ class InventoryTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     inventory = relationship("IngredientInventory", back_populates="transactions")
+
+
+class ReviewMeeting(Base):
+    __tablename__ = "review_meetings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    review_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    judges: Mapped[list] = mapped_column(JSON, nullable=False)
+    version_ids: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    scores = relationship("ReviewScore", back_populates="meeting", cascade="all, delete-orphan")
+    decisions = relationship("ReviewDecision", back_populates="meeting", cascade="all, delete-orphan")
+
+
+class ReviewScore(Base):
+    __tablename__ = "review_scores"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[int] = mapped_column(Integer, ForeignKey("review_meetings.id"), nullable=False)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False)
+    judge_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    rationality_score: Mapped[float] = mapped_column(Float, nullable=False)
+    cost_score: Mapped[float] = mapped_column(Float, nullable=False)
+    feasibility_score: Mapped[float] = mapped_column(Float, nullable=False)
+    comment: Mapped[str] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    meeting = relationship("ReviewMeeting", back_populates="scores")
+
+
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[int] = mapped_column(Integer, ForeignKey("review_meetings.id"), nullable=False)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False)
+    avg_rationality: Mapped[float] = mapped_column(Float, nullable=False)
+    avg_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    avg_feasibility: Mapped[float] = mapped_column(Float, nullable=False)
+    final_score: Mapped[float] = mapped_column(Float, nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    meeting = relationship("ReviewMeeting", back_populates="decisions")
+    version = relationship("FormulaVersion")

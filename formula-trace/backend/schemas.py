@@ -448,3 +448,111 @@ class PurchaseWarningResponse(BaseModel):
     warning_count: int
     normal_count: int
     items: list[PurchaseWarningItem]
+
+
+class ReviewMeetingCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    review_date: date
+    version_ids: list[int] = Field(..., min_length=1, max_length=5)
+    judges: list[str] = Field(..., min_length=1)
+
+    @field_validator('judges')
+    @classmethod
+    def validate_judges(cls, v):
+        if len(v) != len(set(v)):
+            raise ValueError("评委不能重复")
+        for name in v:
+            if not name.strip():
+                raise ValueError("评委名称不能为空")
+            if len(name) > 200:
+                raise ValueError("评委名称不能超过200字符")
+        return v
+
+
+class ReviewScoreSubmit(BaseModel):
+    version_id: int
+    judge_name: str = Field(..., min_length=1, max_length=200)
+    rationality_score: float = Field(..., ge=1, le=10)
+    cost_score: float = Field(..., ge=1, le=10)
+    feasibility_score: float = Field(..., ge=1, le=10)
+    comment: Optional[str] = Field(None, max_length=1000)
+
+
+class ReviewScoreResponse(BaseModel):
+    id: int
+    meeting_id: int
+    version_id: int
+    judge_name: str
+    rationality_score: float
+    cost_score: float
+    feasibility_score: float
+    comment: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewDecisionResponse(BaseModel):
+    id: int
+    meeting_id: int
+    version_id: int
+    version_number: Optional[int] = None
+    ingredients_summary: Optional[str] = None
+    avg_rationality: float
+    avg_cost: float
+    avg_feasibility: float
+    final_score: float
+    decision: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewMeetingResponse(BaseModel):
+    id: int
+    title: str
+    review_date: date
+    status: str
+    judges: list[str]
+    version_ids: list[int]
+    version_count: int
+    judge_count: int
+    created_at: datetime
+    started_at: Optional[datetime]
+    ended_at: Optional[datetime]
+    scores: list[ReviewScoreResponse]
+    decisions: list[ReviewDecisionResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewMeetingListItem(BaseModel):
+    id: int
+    title: str
+    review_date: date
+    status: str
+    version_count: int
+    judge_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class VersionReviewRecord(BaseModel):
+    meeting_id: int
+    meeting_title: str
+    meeting_date: date
+    meeting_status: str
+    avg_rationality: Optional[float]
+    avg_cost: Optional[float]
+    avg_feasibility: Optional[float]
+    final_score: Optional[float]
+    decision: Optional[str]
+    judge_scores: list[ReviewScoreResponse]
+
+    class Config:
+        from_attributes = True

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined } from '@ant-design/icons';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord } from '../types';
-import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor } from '../api';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord } from '../types';
+import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor } from '../api';
 
 const { Title, Text } = Typography;
 
@@ -67,6 +67,8 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [approvalHistory, setApprovalHistory] = useState<ApprovalRecord[]>([]);
   const [approvalHistoryLoading, setApprovalHistoryLoading] = useState(false);
   const [approvalActionLoading, setApprovalActionLoading] = useState(false);
+  const [reviewRecords, setReviewRecords] = useState<VersionReviewRecord[]>([]);
+  const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -87,6 +89,22 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       });
     return () => { cancelled = true; };
   }, [version.id, version.approval_status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReviewRecordsLoading(true);
+    api.getVersionReviews(version.id)
+      .then(data => {
+        if (!cancelled) setReviewRecords(data);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewRecords([]);
+      })
+      .finally(() => {
+        if (!cancelled) setReviewRecordsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id]);
 
   const handleApprovalAction = useCallback(async (action: 'submit' | 'approve', operator: string, remark?: string) => {
     setApprovalActionLoading(true);
@@ -1633,6 +1651,164 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
           />
         ) : (
           <Empty description="暂无审批记录" />
+        )}
+      </Card>
+
+      <Card
+        size="small"
+        title={<Space><AuditOutlined /> 评审记录</Space>}
+        loading={reviewRecordsLoading}
+        extra={
+          reviewRecords.length > 0 && (
+            <Tag color="blue">共 {reviewRecords.length} 次评审</Tag>
+          )
+        }
+      >
+        {reviewRecords.length > 0 ? (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            {reviewRecords.map((record, idx) => (
+              <Card key={idx} size="small" style={{ borderLeft: '4px solid #1890ff' }}>
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Space>
+                      <Text strong style={{ fontSize: 15 }}>{record.meeting_title}</Text>
+                      <Tag color={getReviewStatusTagColor(record.meeting_status)}>
+                        {getReviewStatusLabel(record.meeting_status)}
+                      </Tag>
+                      {record.decision && (
+                        <Tag
+                          color={getDecisionTagColor(record.decision)}
+                          icon={
+                            record.decision === 'approve' ? <CheckCircleOutlined /> :
+                            record.decision === 'conditional' ? <ExclamationCircleOutlined /> :
+                            <CloseCircleOutlined />
+                          }
+                        >
+                          {getDecisionLabel(record.decision)}
+                        </Tag>
+                      )}
+                    </Space>
+                    <Text type="secondary">{record.meeting_date}</Text>
+                  </div>
+
+                  {record.final_score !== null && (
+                    <Row gutter={16}>
+                      <Col span={6}>
+                        <Card size="small" style={{ textAlign: 'center' }}>
+                          <Statistic
+                            title="综合得分"
+                            value={record.final_score}
+                            precision={2}
+                            valueStyle={{ color: getScoreColor(record.final_score), fontSize: 20 }}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" style={{ textAlign: 'center' }}>
+                          <Statistic
+                            title="合理性"
+                            value={record.avg_rationality ?? 0}
+                            precision={2}
+                            valueStyle={{ color: getScoreColor(record.avg_rationality!) }}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" style={{ textAlign: 'center' }}>
+                          <Statistic
+                            title="成本"
+                            value={record.avg_cost ?? 0}
+                            precision={2}
+                            valueStyle={{ color: getScoreColor(record.avg_cost!) }}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" style={{ textAlign: 'center' }}>
+                          <Statistic
+                            title="工艺"
+                            value={record.avg_feasibility ?? 0}
+                            precision={2}
+                            valueStyle={{ color: getScoreColor(record.avg_feasibility!) }}
+                          />
+                        </Card>
+                      </Col>
+                    </Row>
+                  )}
+
+                  {record.judge_scores.length > 0 && (
+                    <Table
+                      size="small"
+                      dataSource={record.judge_scores.map((s, i) => ({ key: i, ...s }))}
+                      pagination={false}
+                      columns={[
+                        {
+                          title: '评委',
+                          dataIndex: 'judge_name',
+                          key: 'judge_name',
+                          width: 120,
+                          render: (v: string) => <Tag color="purple">{v}</Tag>,
+                        },
+                        {
+                          title: '合理性',
+                          dataIndex: 'rationality_score',
+                          key: 'rationality_score',
+                          width: 100,
+                          align: 'center',
+                          render: (v: number) => (
+                            <Text strong style={{ color: getScoreColor(v) }}>{v}</Text>
+                          ),
+                        },
+                        {
+                          title: '成本',
+                          dataIndex: 'cost_score',
+                          key: 'cost_score',
+                          width: 100,
+                          align: 'center',
+                          render: (v: number) => (
+                            <Text strong style={{ color: getScoreColor(v) }}>{v}</Text>
+                          ),
+                        },
+                        {
+                          title: '工艺',
+                          dataIndex: 'feasibility_score',
+                          key: 'feasibility_score',
+                          width: 100,
+                          align: 'center',
+                          render: (v: number) => (
+                            <Text strong style={{ color: getScoreColor(v) }}>{v}</Text>
+                          ),
+                        },
+                        {
+                          title: '平均分',
+                          key: 'avg',
+                          width: 100,
+                          align: 'center',
+                          render: (_: any, record: any) => {
+                            const avg = (record.rationality_score + record.cost_score + record.feasibility_score) / 3;
+                            return (
+                              <Text strong style={{ color: getScoreColor(avg), fontSize: 16 }}>
+                                {avg.toFixed(2)}
+                              </Text>
+                            );
+                          },
+                        },
+                        {
+                          title: '评审意见',
+                          dataIndex: 'comment',
+                          key: 'comment',
+                          ellipsis: true,
+                          render: (v: string | null) => v || <Text type="secondary">-</Text>,
+                        },
+                      ]}
+                    />
+                  )}
+                </Space>
+              </Card>
+            ))}
+          </Space>
+        ) : (
+          <Empty description="暂无评审记录" />
         )}
       </Card>
     </Space>

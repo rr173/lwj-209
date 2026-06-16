@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Layout, Menu, Space, Button, Select, Modal, message, Input, Typography } from 'antd';
-import { ReloadOutlined, BarChartOutlined, SearchOutlined, DatabaseOutlined, HomeOutlined } from '@ant-design/icons';
+import { ReloadOutlined, BarChartOutlined, SearchOutlined, DatabaseOutlined, HomeOutlined, AuditOutlined } from '@ant-design/icons';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import type { ProductLine, VersionTreeNode, FormulaVersion, Batch, TracePathResponse } from './types';
 import { api, collectVersionIds } from './api';
@@ -9,6 +9,8 @@ import VersionDetail from './components/VersionDetail';
 import CompareModal from './components/CompareModal';
 import TraceModal from './components/TraceModal';
 import InventoryPage from './components/InventoryPage';
+import ReviewListPage from './components/ReviewListPage';
+import ReviewDetailPage from './components/ReviewDetailPage';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -30,6 +32,7 @@ function FormulaPage() {
 
   const menuItems = [
     { key: '/', icon: <HomeOutlined />, label: '配方管理' },
+    { key: '/reviews', icon: <AuditOutlined />, label: '评审会议' },
     { key: '/inventory', icon: <DatabaseOutlined />, label: '库存管理' },
   ];
 
@@ -271,6 +274,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<FormulaPage />} />
+        <Route path="/reviews" element={<ReviewListPage />} />
+        <Route path="/reviews/:id" element={<ReviewDetailPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
       </Routes>
     </BrowserRouter>

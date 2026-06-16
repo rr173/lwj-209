@@ -26,6 +26,12 @@ import type {
   IngredientInventoryUpdate,
   StockInRequest,
   StockOutRequest,
+  ReviewMeeting,
+  ReviewMeetingListItem,
+  ReviewMeetingCreate,
+  ReviewScoreSubmit,
+  ReviewScore,
+  VersionReviewRecord,
 } from './types';
 
 const API_BASE = '/api';
@@ -137,6 +143,27 @@ export const api = {
 
   getPurchaseWarnings: (): Promise<PurchaseWarningResponse> =>
     axios.get(`${API_BASE}/inventory/warnings`).then(r => r.data),
+
+  createReviewMeeting: (data: ReviewMeetingCreate): Promise<ReviewMeeting> =>
+    axios.post(`${API_BASE}/reviews`, data).then(r => r.data),
+
+  getReviewMeetings: (): Promise<ReviewMeetingListItem[]> =>
+    axios.get(`${API_BASE}/reviews`).then(r => r.data),
+
+  getReviewMeeting: (meetingId: number): Promise<ReviewMeeting> =>
+    axios.get(`${API_BASE}/reviews/${meetingId}`).then(r => r.data),
+
+  startReviewMeeting: (meetingId: number): Promise<ReviewMeeting> =>
+    axios.post(`${API_BASE}/reviews/${meetingId}/start`).then(r => r.data),
+
+  submitReviewScore: (meetingId: number, data: ReviewScoreSubmit): Promise<ReviewScore> =>
+    axios.post(`${API_BASE}/reviews/${meetingId}/score`, data).then(r => r.data),
+
+  endReviewMeeting: (meetingId: number): Promise<ReviewMeeting> =>
+    axios.post(`${API_BASE}/reviews/${meetingId}/end`).then(r => r.data),
+
+  getVersionReviews: (versionId: number): Promise<VersionReviewRecord[]> =>
+    axios.get(`${API_BASE}/reviews/version/${versionId}`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {
@@ -189,6 +216,60 @@ export function getApprovalStatusTagColor(status: string): string {
     case 'pending': return 'warning';
     case 'published': return 'success';
     case 'rejected': return 'error';
+    default: return 'default';
+  }
+}
+
+export function getReviewStatusLabel(status: string): string {
+  switch (status) {
+    case 'pending': return '待开始';
+    case 'ongoing': return '进行中';
+    case 'ended': return '已结束';
+    default: return status;
+  }
+}
+
+export function getReviewStatusColor(status: string): string {
+  switch (status) {
+    case 'pending': return '#8c8c8c';
+    case 'ongoing': return '#1890ff';
+    case 'ended': return '#52c41a';
+    default: return '#8c8c8c';
+  }
+}
+
+export function getReviewStatusTagColor(status: string): string {
+  switch (status) {
+    case 'pending': return 'default';
+    case 'ongoing': return 'processing';
+    case 'ended': return 'success';
+    default: return 'default';
+  }
+}
+
+export function getDecisionLabel(decision: string): string {
+  switch (decision) {
+    case 'approve': return '通过';
+    case 'conditional': return '有条件通过';
+    case 'reject': return '否决';
+    default: return decision;
+  }
+}
+
+export function getDecisionColor(decision: string): string {
+  switch (decision) {
+    case 'approve': return '#52c41a';
+    case 'conditional': return '#faad14';
+    case 'reject': return '#f5222d';
+    default: return '#8c8c8c';
+  }
+}
+
+export function getDecisionTagColor(decision: string): string {
+  switch (decision) {
+    case 'approve': return 'success';
+    case 'conditional': return 'warning';
+    case 'reject': return 'error';
     default: return 'default';
   }
 }

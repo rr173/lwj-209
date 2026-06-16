@@ -320,3 +320,84 @@ export interface StockOutRequest {
   batch_number?: string | null;
   remark?: string | null;
 }
+
+export interface ReviewScore {
+  id: number;
+  meeting_id: number;
+  version_id: number;
+  judge_name: string;
+  rationality_score: number;
+  cost_score: number;
+  feasibility_score: number;
+  comment: string | null;
+  created_at: string;
+}
+
+export interface ReviewDecision {
+  id: number;
+  meeting_id: number;
+  version_id: number;
+  version_number?: number | null;
+  ingredients_summary?: string | null;
+  avg_rationality: number;
+  avg_cost: number;
+  avg_feasibility: number;
+  final_score: number;
+  decision: 'approve' | 'conditional' | 'reject';
+  created_at: string;
+}
+
+export interface ReviewMeeting {
+  id: number;
+  title: string;
+  review_date: string;
+  status: 'pending' | 'ongoing' | 'ended';
+  judges: string[];
+  version_ids: number[];
+  version_count: number;
+  judge_count: number;
+  created_at: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  scores: ReviewScore[];
+  decisions: ReviewDecision[];
+}
+
+export interface ReviewMeetingListItem {
+  id: number;
+  title: string;
+  review_date: string;
+  status: 'pending' | 'ongoing' | 'ended';
+  version_count: number;
+  judge_count: number;
+  created_at: string;
+}
+
+export interface ReviewMeetingCreate {
+  title: string;
+  review_date: string;
+  version_ids: number[];
+  judges: string[];
+}
+
+export interface ReviewScoreSubmit {
+  version_id: number;
+  judge_name: string;
+  rationality_score: number;
+  cost_score: number;
+  feasibility_score: number;
+  comment?: string | null;
+}
+
+export interface VersionReviewRecord {
+  meeting_id: number;
+  meeting_title: string;
+  meeting_date: string;
+  meeting_status: string;
+  avg_rationality: number | null;
+  avg_cost: number | null;
+  avg_feasibility: number | null;
+  final_score: number | null;
+  decision: string | null;
+  judge_scores: ReviewScore[];
+}
