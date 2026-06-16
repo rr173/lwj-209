@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -73,6 +73,7 @@ class FormulaVersionResponse(BaseModel):
     ingredients_summary: str
     batch_count: int
     best_batch_score: Optional[float]
+    approval_status: str = "draft"
 
     class Config:
         from_attributes = True
@@ -111,6 +112,7 @@ class VersionTreeNode(BaseModel):
     ingredients_summary: str
     batch_count: int
     best_batch_score: Optional[float]
+    approval_status: str = "draft"
     children: list["VersionTreeNode"] = []
 
 
@@ -344,3 +346,30 @@ class AgingSimulationResponse(BaseModel):
     overall_active_retention_rate: float
     overall_preservative_retention_rate: float
     overall_base_retention_rate: float
+
+
+class ApprovalSubmitRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+    remark: Optional[str] = Field(None, max_length=1000)
+
+
+class ApprovalActionRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+    remark: Optional[str] = Field(None, max_length=1000)
+
+
+class ApprovalRejectRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+    remark: str = Field(..., min_length=1, max_length=1000)
+
+
+class ApprovalRecordResponse(BaseModel):
+    id: int
+    version_id: int
+    action: str
+    operator: str
+    remark: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

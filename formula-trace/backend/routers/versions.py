@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from database import get_db
 from models import FormulaVersion, ProductLine, ExclusionGroup, Batch
-from schemas import FormulaVersionCreate, FormulaVersionResponse, VersionTreeNode, CompareResponse, CompareDiffItem
+from schemas import FormulaVersionCreate, FormulaVersionResponse, VersionTreeNode, CompareResponse, CompareDiffItem, IngredientItem
 from utils import compute_batch_scores
 
 router = APIRouter(prefix="/api/versions", tags=["versions"])
@@ -33,6 +33,35 @@ def check_exclusion_conflicts(ingredient_names: list[str], exclusion_groups: lis
                 "conflicting_ingredients": found
             })
     return conflicts
+
+
+async def build_version_response(version: FormulaVersion, db: AsyncSession) -> FormulaVersionResponse:
+    all_batches_result = await db.execute(
+        select(Batch).where(
+            Batch.version_id.in_(
+                select(FormulaVersion.id).where(FormulaVersion.product_line_id == version.product_line_id)
+            ),
+            Batch.skin_feel_score.isnot(None)
+        )
+    )
+    all_batches = all_batches_result.scalars().all()
+    score_map, _, _ = compute_batch_scores(all_batches)
+
+    version_batches = [b for b in all_batches if b.version_id == version.id]
+    scores = [score_map.get(b.id) for b in version_batches if b.id in score_map]
+    best_score = max(scores) if scores else None
+
+    return FormulaVersionResponse(
+        id=version.id,
+        product_line_id=version.product_line_id,
+        version_number=version.version_number,
+        parent_id=version.parent_id,
+        ingredients=[IngredientItem(**ing) for ing in version.ingredients],
+        ingredients_summary=get_ingredients_summary(version.ingredients),
+        batch_count=len(version_batches),
+        best_batch_score=best_score,
+        approval_status=version.approval_status
+    )
 
 
 @router.post("", response_model=FormulaVersionResponse, status_code=201)
@@ -89,7 +118,8 @@ async def create_version(data: FormulaVersionCreate, db: AsyncSession = Depends(
         product_line_id=data.product_line_id,
         version_number=version_number,
         parent_id=data.parent_id,
-        ingredients=ingredients_dict
+        ingredients=ingredients_dict,
+        approval_status="draft"
     )
     db.add(version)
     await db.commit()
@@ -103,7 +133,8 @@ async def create_version(data: FormulaVersionCreate, db: AsyncSession = Depends(
         ingredients=data.ingredients,
         ingredients_summary=get_ingredients_summary(ingredients_dict),
         batch_count=0,
-        best_batch_score=None
+        best_batch_score=None,
+        approval_status="draft"
     )
 
 
@@ -193,6 +224,7 @@ async def get_version_tree(product_line_id: int, db: AsyncSession = Depends(get_
             ingredients_summary=get_ingredients_summary(v.ingredients),
             batch_count=info["count"],
             best_batch_score=info["best_score"],
+            approval_status=v.approval_status,
             children=[]
         )
 
@@ -215,29 +247,4 @@ async def get_version(version_id: int, db: AsyncSession = Depends(get_db)):
     if not version:
         raise HTTPException(status_code=404, detail="版本不存在")
 
-    all_batches_result = await db.execute(
-        select(Batch).where(
-            Batch.version_id.in_(
-                select(FormulaVersion.id).where(FormulaVersion.product_line_id == version.product_line_id)
-            ),
-            Batch.skin_feel_score.isnot(None)
-        )
-    )
-    all_batches = all_batches_result.scalars().all()
-    score_map, _, _ = compute_batch_scores(all_batches)
-
-    version_batches = [b for b in all_batches if b.version_id == version.id]
-    scores = [score_map.get(b.id) for b in version_batches if b.id in score_map]
-    best_score = max(scores) if scores else None
-
-    from schemas import IngredientItem
-    return FormulaVersionResponse(
-        id=version.id,
-        product_line_id=version.product_line_id,
-        version_number=version.version_number,
-        parent_id=version.parent_id,
-        ingredients=[IngredientItem(**ing) for ing in version.ingredients],
-        ingredients_summary=get_ingredients_summary(version.ingredients),
-        batch_count=len(version_batches),
-        best_batch_score=best_score
-    )
+    return await build_version_response(version, db)

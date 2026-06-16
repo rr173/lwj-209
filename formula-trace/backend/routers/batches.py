@@ -18,8 +18,12 @@ def generate_batch_number(version_id: int, count: int) -> str:
 @router.post("", response_model=BatchResponse, status_code=201)
 async def create_batch(data: BatchCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(FormulaVersion).where(FormulaVersion.id == data.version_id))
-    if not result.scalar_one_or_none():
+    version = result.scalar_one_or_none()
+    if not version:
         raise HTTPException(status_code=404, detail="配方版本不存在")
+
+    if version.approval_status != "published":
+        raise HTTPException(status_code=400, detail=f"只有已发布的版本才能创建试产批次，当前状态为「{version.approval_status}」")
 
     count_result = await db.execute(
         select(func.count(Batch.id)).where(Batch.version_id == data.version_id)

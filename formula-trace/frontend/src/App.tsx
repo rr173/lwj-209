@@ -75,6 +75,25 @@ function App() {
     }
   };
 
+  const handleVersionUpdated = async () => {
+    if (selectedProductLine) {
+      try {
+        const treeData = await api.getVersionTree(selectedProductLine);
+        setVersionTree(treeData);
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (selectedVersion) {
+      try {
+        const data = await api.getVersion(selectedVersion.id);
+        setSelectedVersion(data);
+      } catch (e) {
+        // ignore
+      }
+    }
+  };
+
   const handleToggleCompare = (versionId: number) => {
     setCompareSelection(prev => {
       if (prev.includes(versionId)) {
@@ -198,6 +217,7 @@ function App() {
               batches={allBatches.filter(b => b.version_id === selectedVersion.id)}
               allBatches={allBatches}
               versionTree={versionTree}
+              onVersionUpdated={handleVersionUpdated}
             />
           ) : (
             <div style={{ textAlign: 'center', color: '#999', padding: 100 }}>

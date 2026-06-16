@@ -1,7 +1,20 @@
-from sqlalchemy import String, Float, Integer, Date, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import String, Float, Integer, Date, ForeignKey, UniqueConstraint, JSON, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 from datetime import date, datetime
+
+
+class ApprovalRecord(Base):
+    __tablename__ = "approval_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    operator: Mapped[str] = mapped_column(String(200), nullable=False)
+    remark: Mapped[str] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    version = relationship("FormulaVersion", back_populates="approval_records")
 
 
 class ProductLine(Base):
@@ -37,11 +50,13 @@ class FormulaVersion(Base):
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     parent_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=True)
     ingredients: Mapped[list] = mapped_column(JSON, nullable=False)
+    approval_status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
 
     product_line = relationship("ProductLine", back_populates="versions")
     parent = relationship("FormulaVersion", remote_side=[id], back_populates="children")
     children = relationship("FormulaVersion", back_populates="parent")
     batches = relationship("Batch", back_populates="version", cascade="all, delete-orphan")
+    approval_records = relationship("ApprovalRecord", back_populates="version", cascade="all, delete-orphan")
 
 
 class Batch(Base):

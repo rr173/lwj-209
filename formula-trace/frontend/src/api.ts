@@ -16,7 +16,8 @@ import type {
   CostSimulateItem,
   StabilityRiskResponse,
   AgingSimulationResponse,
-  CompatibilityListItem
+  CompatibilityListItem,
+  ApprovalRecord
 } from './types';
 
 const API_BASE = '/api';
@@ -89,6 +90,18 @@ export const api = {
     axios.get(`${API_BASE}/stability/compatibility-rules/by-ingredient/${ingredientName}`, {
       params: versionId ? { version_id: versionId } : {}
     }).then(r => r.data),
+
+  submitForApproval: (versionId: number, operator: string, remark?: string): Promise<FormulaVersion> =>
+    axios.post(`${API_BASE}/approvals/${versionId}/submit`, { operator, remark }).then(r => r.data),
+
+  approveVersion: (versionId: number, operator: string, remark?: string): Promise<FormulaVersion> =>
+    axios.post(`${API_BASE}/approvals/${versionId}/approve`, { operator, remark }).then(r => r.data),
+
+  rejectVersion: (versionId: number, operator: string, remark: string): Promise<FormulaVersion> =>
+    axios.post(`${API_BASE}/approvals/${versionId}/reject`, { operator, remark }).then(r => r.data),
+
+  getApprovalHistory: (versionId: number): Promise<ApprovalRecord[]> =>
+    axios.get(`${API_BASE}/approvals/${versionId}/history`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {
@@ -113,4 +126,34 @@ export function collectVersionIds(node: VersionTreeNode, ids: number[] = []): nu
     collectVersionIds(child, ids);
   }
   return ids;
+}
+
+export function getApprovalStatusColor(status: string): string {
+  switch (status) {
+    case 'draft': return '#8c8c8c';
+    case 'pending': return '#faad14';
+    case 'published': return '#52c41a';
+    case 'rejected': return '#f5222d';
+    default: return '#8c8c8c';
+  }
+}
+
+export function getApprovalStatusLabel(status: string): string {
+  switch (status) {
+    case 'draft': return '草稿';
+    case 'pending': return '待审批';
+    case 'published': return '已发布';
+    case 'rejected': return '已驳回';
+    default: return status;
+  }
+}
+
+export function getApprovalStatusTagColor(status: string): string {
+  switch (status) {
+    case 'draft': return 'default';
+    case 'pending': return 'warning';
+    case 'published': return 'success';
+    case 'rejected': return 'error';
+    default: return 'default';
+  }
 }

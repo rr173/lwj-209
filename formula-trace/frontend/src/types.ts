@@ -19,6 +19,7 @@ export interface FormulaVersion {
   ingredients_summary: string;
   batch_count: number;
   best_batch_score: number | null;
+  approval_status: string;
   children?: FormulaVersion[];
 }
 
@@ -28,6 +29,7 @@ export interface VersionTreeNode {
   ingredients_summary: string;
   batch_count: number;
   best_batch_score: number | null;
+  approval_status: string;
   children: VersionTreeNode[];
 }
 
@@ -238,3 +240,14 @@ export interface AgingSimulationResponse {
   overall_preservative_retention_rate: number;
   overall_base_retention_rate: number;
 }
+
+export interface ApprovalRecord {
+  id: number;
+  version_id: number;
+  action: string;
+  operator: string;
+  remark: string | null;
+  created_at: string;
+}
+
+export type ApprovalStatus = 'draft' | 'pending' | 'published' | 'rejected';

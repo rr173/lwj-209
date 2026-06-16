@@ -39,7 +39,8 @@ async def seed_database():
             product_line_id=pl.id,
             version_number=1,
             parent_id=None,
-            ingredients=v1_ingredients
+            ingredients=v1_ingredients,
+            approval_status="published"
         )
         db.add(v1)
         await db.flush()
@@ -61,7 +62,8 @@ async def seed_database():
             product_line_id=pl.id,
             version_number=2,
             parent_id=v1.id,
-            ingredients=v2_ingredients
+            ingredients=v2_ingredients,
+            approval_status="published"
         )
         db.add(v2)
         await db.flush()
@@ -84,7 +86,8 @@ async def seed_database():
             product_line_id=pl.id,
             version_number=3,
             parent_id=v2.id,
-            ingredients=v3_ingredients
+            ingredients=v3_ingredients,
+            approval_status="published"
         )
         db.add(v3)
         await db.flush()
@@ -106,7 +109,8 @@ async def seed_database():
             product_line_id=pl.id,
             version_number=4,
             parent_id=v1.id,
-            ingredients=v4_ingredients
+            ingredients=v4_ingredients,
+            approval_status="pending"
         )
         db.add(v4)
         await db.flush()
@@ -129,7 +133,8 @@ async def seed_database():
             product_line_id=pl.id,
             version_number=5,
             parent_id=v4.id,
-            ingredients=v5_ingredients
+            ingredients=v5_ingredients,
+            approval_status="published"
         )
         db.add(v5)
         await db.flush()

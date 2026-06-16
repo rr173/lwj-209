@@ -1,6 +1,6 @@
 import type { VersionTreeNode } from '../types';
-import { getScoreGradient } from '../api';
-import { Checkbox } from 'antd';
+import { getScoreGradient, getApprovalStatusColor, getApprovalStatusLabel } from '../api';
+import { Checkbox, Tag } from 'antd';
 
 interface Props {
   tree: VersionTreeNode[];
@@ -21,14 +21,15 @@ function renderNode(
   const hasBatches = node.batch_count > 0;
   const isSelected = selectedId === node.id;
   const isCompareSelected = compareSelection.includes(node.id);
-  const color = hasBatches ? getScoreGradient(node.best_batch_score) : '#bfbfbf';
+  const scoreColor = hasBatches ? getScoreGradient(node.best_batch_score) : '#bfbfbf';
+  const statusColor = getApprovalStatusColor(node.approval_status);
 
   return (
     <div key={node.id} style={{ marginLeft: level > 0 ? 20 : 0 }}>
       <div
         className={`tree-node ${isSelected ? 'selected' : ''} ${!hasBatches ? 'no-batches' : ''}`}
         onClick={() => onSelect(node.id)}
-        style={{ borderLeftColor: hasBatches ? color : 'transparent' }}
+        style={{ borderLeftColor: statusColor }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Checkbox
@@ -36,9 +37,23 @@ function renderNode(
             onClick={e => e.stopPropagation()}
             onChange={() => onToggleCompare(node.id)}
           />
-          <span className="version-badge" style={{ background: color, color: 'white' }}>
+          <span className="version-badge" style={{ background: scoreColor, color: 'white' }}>
             V{node.version_number}
           </span>
+          <Tag
+            style={{
+              fontSize: 11,
+              lineHeight: '18px',
+              padding: '0 4px',
+              margin: 0,
+              borderRadius: 4,
+              background: `${statusColor}20`,
+              color: statusColor,
+              border: `1px solid ${statusColor}40`,
+            }}
+          >
+            {getApprovalStatusLabel(node.approval_status)}
+          </Tag>
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {node.ingredients_summary}
           </span>
@@ -46,7 +61,7 @@ function renderNode(
         <div style={{ marginTop: 4, paddingLeft: 28, fontSize: 12, color: '#999' }}>
           {node.batch_count > 0 ? (
             <span>
-              <span className="score-color" style={{ background: color }} />
+              <span className="score-color" style={{ background: scoreColor }} />
               <span style={{ marginLeft: 4 }}>
                 {node.batch_count} 个批次 · 最高评分 {node.best_batch_score?.toFixed(1)}
               </span>

@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline } from 'antd';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem } from '../types';
-import { getScoreColor, api } from '../api';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord } from '../types';
+import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor } from '../api';
 
 const { Title, Text } = Typography;
 
@@ -13,9 +13,10 @@ interface Props {
   allBatches: Batch[];
   versionTree: VersionTreeNode[];
   onVersionCreated?: () => void;
+  onVersionUpdated?: () => void;
 }
 
-export default function VersionDetail({ version, batches, allBatches, versionTree, onVersionCreated }: Props) {
+export default function VersionDetail({ version, batches, allBatches, versionTree, onVersionCreated, onVersionUpdated }: Props) {
   const [traceModalVisible, setTraceModalVisible] = useState(false);
   const [traceData, setTraceData] = useState<any>(null);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
@@ -61,8 +62,66 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   } | null>(null);
   const [compatibilityLoading, setCompatibilityLoading] = useState(false);
 
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectForm] = Form.useForm();
+  const [approvalHistory, setApprovalHistory] = useState<ApprovalRecord[]>([]);
+  const [approvalHistoryLoading, setApprovalHistoryLoading] = useState(false);
+  const [approvalActionLoading, setApprovalActionLoading] = useState(false);
+
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
+  const isPublished = version.approval_status === 'published';
+
+  useEffect(() => {
+    let cancelled = false;
+    setApprovalHistoryLoading(true);
+    api.getApprovalHistory(version.id)
+      .then(data => {
+        if (!cancelled) setApprovalHistory(data);
+      })
+      .catch(() => {
+        if (!cancelled) setApprovalHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setApprovalHistoryLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id, version.approval_status]);
+
+  const handleApprovalAction = useCallback(async (action: 'submit' | 'approve', operator: string, remark?: string) => {
+    setApprovalActionLoading(true);
+    try {
+      if (action === 'submit') {
+        await api.submitForApproval(version.id, operator, remark);
+        message.success('已提交审批');
+      } else {
+        await api.approveVersion(version.id, operator, remark);
+        message.success('审批通过，版本已发布');
+      }
+      if (onVersionUpdated) onVersionUpdated();
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.detail || '操作失败';
+      message.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    } finally {
+      setApprovalActionLoading(false);
+    }
+  }, [version.id, onVersionUpdated]);
+
+  const handleReject = useCallback(async (values: any) => {
+    setApprovalActionLoading(true);
+    try {
+      await api.rejectVersion(version.id, values.operator, values.remark);
+      message.success('已驳回');
+      setRejectModalVisible(false);
+      rejectForm.resetFields();
+      if (onVersionUpdated) onVersionUpdated();
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.detail || '驳回失败';
+      message.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    } finally {
+      setApprovalActionLoading(false);
+    }
+  }, [version.id, onVersionUpdated, rejectForm]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1519,6 +1578,66 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     </Space>
   );
 
+  const renderApprovalTab = () => (
+    <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Card size="small" title={<Space><AuditOutlined /> 审批状态</Space>}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+          <Tag color={getApprovalStatusTagColor(version.approval_status)} style={{ fontSize: 16, padding: '4px 16px' }}>
+            {getApprovalStatusLabel(version.approval_status)}
+          </Tag>
+          <Text type="secondary">
+            {version.approval_status === 'draft' && '当前版本为草稿状态，提交审批后方可发布使用。'}
+            {version.approval_status === 'pending' && '当前版本已提交审批，等待审批人审核。'}
+            {version.approval_status === 'published' && '当前版本已发布，可创建试产批次。'}
+            {version.approval_status === 'rejected' && '当前版本已被驳回，可修改后重新提交审批。'}
+          </Text>
+        </div>
+        {!isPublished && (
+          <Alert
+            type="warning"
+            showIcon
+            message="未发布的版本不能创建试产批次"
+            description="请先提交审批并通过后，才能为该版本创建试产批次。"
+          />
+        )}
+      </Card>
+
+      <Card size="small" title={<Space><HistoryOutlined /> 审批历史</Space>} loading={approvalHistoryLoading}>
+        {approvalHistory.length > 0 ? (
+          <Timeline
+            items={approvalHistory.map(record => ({
+              color: record.action === 'approve' ? 'green' : record.action === 'reject' ? 'red' : record.action === 'submit' ? 'blue' : 'gray',
+              children: (
+                <div>
+                  <Space>
+                    <Tag color={
+                      record.action === 'submit' ? 'blue' :
+                      record.action === 'approve' ? 'green' :
+                      record.action === 'reject' ? 'red' : 'default'
+                    }>
+                      {record.action === 'submit' ? '提交审批' :
+                       record.action === 'approve' ? '审批通过' :
+                       record.action === 'reject' ? '驳回' : record.action}
+                    </Tag>
+                    <Text strong>{record.operator}</Text>
+                    <Text type="secondary">{new Date(record.created_at).toLocaleString('zh-CN')}</Text>
+                  </Space>
+                  {record.remark && (
+                    <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4 }}>
+                      <Text type="secondary">备注：</Text>{record.remark}
+                    </div>
+                  )}
+                </div>
+              )
+            }))}
+          />
+        ) : (
+          <Empty description="暂无审批记录" />
+        )}
+      </Card>
+    </Space>
+  );
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <Card
@@ -1528,6 +1647,9 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               V{version.version_number}
             </span>
             <span>配方版本详情</span>
+            <Tag color={getApprovalStatusTagColor(version.approval_status)}>
+              {getApprovalStatusLabel(version.approval_status)}
+            </Tag>
             {version.parent_id && (
               <Tag color="blue">父版本: V{version.parent_id}</Tag>
             )}
@@ -1535,13 +1657,73 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
         }
         extra={
           <Space>
+            {(version.approval_status === 'draft' || version.approval_status === 'rejected') && (
+              <Popconfirm
+                title="提交审批"
+                description={
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <span>确定提交此版本进行审批？</span>
+                    <Input placeholder="审批人姓名" id="submit-operator-input" />
+                    <Input.TextArea placeholder="备注（可选）" id="submit-remark-input" rows={2} />
+                  </div>
+                }
+                onConfirm={() => {
+                  const opEl = document.getElementById('submit-operator-input') as HTMLInputElement;
+                  const rmEl = document.getElementById('submit-remark-input') as HTMLTextAreaElement;
+                  const operator = opEl?.value?.trim() || '申请人';
+                  const remark = rmEl?.value?.trim() || undefined;
+                  handleApprovalAction('submit', operator, remark);
+                }}
+                okText="确定提交"
+                cancelText="取消"
+              >
+                <Button icon={<SendOutlined />} loading={approvalActionLoading}>
+                  提交审批
+                </Button>
+              </Popconfirm>
+            )}
+            {version.approval_status === 'pending' && (
+              <>
+                <Popconfirm
+                  title="审批通过"
+                  description={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <span>确定通过此版本的审批？</span>
+                      <Input placeholder="审批人姓名" id="approve-operator-input" />
+                      <Input.TextArea placeholder="备注（可选）" id="approve-remark-input" rows={2} />
+                    </div>
+                  }
+                  onConfirm={() => {
+                    const opEl = document.getElementById('approve-operator-input') as HTMLInputElement;
+                    const rmEl = document.getElementById('approve-remark-input') as HTMLTextAreaElement;
+                    const operator = opEl?.value?.trim() || '审批人';
+                    const remark = rmEl?.value?.trim() || undefined;
+                    handleApprovalAction('approve', operator, remark);
+                  }}
+                  okText="确定通过"
+                  cancelText="取消"
+                >
+                  <Button type="primary" icon={<CheckCircleOutlined />} loading={approvalActionLoading}>
+                    通过
+                  </Button>
+                </Popconfirm>
+                <Button danger icon={<CloseCircleOutlined />} onClick={() => setRejectModalVisible(true)} loading={approvalActionLoading}>
+                  驳回
+                </Button>
+              </>
+            )}
             <Button type="dashed" onClick={openRecommend} icon={<ThunderboltOutlined />}>
               智能推荐
             </Button>
             <Button type="dashed" onClick={openCreateVersion}>
               <PlusOutlined /> 派生新版本
             </Button>
-            <Button type="primary" onClick={() => setCreateBatchVisible(true)}>
+            <Button
+              type="primary"
+              onClick={() => setCreateBatchVisible(true)}
+              disabled={!isPublished}
+              title={!isPublished ? '只有已发布的版本才能创建试产批次' : undefined}
+            >
               + 创建试产批次
             </Button>
           </Space>
@@ -1569,6 +1751,11 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'stability',
               label: <span><SafetyOutlined /> 稳定性</span>,
               children: renderStabilityTab()
+            },
+            {
+              key: 'approval',
+              label: <span><AuditOutlined /> 审批</span>,
+              children: renderApprovalTab()
             }
           ]}
         />
@@ -2054,6 +2241,33 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
             )}
           </Card>
         </Space>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <CloseCircleOutlined style={{ color: '#f5222d' }} />
+            <span>驳回版本 V{version.version_number}</span>
+          </Space>
+        }
+        open={rejectModalVisible}
+        onCancel={() => {
+          setRejectModalVisible(false);
+          rejectForm.resetFields();
+        }}
+        onOk={() => rejectForm.submit()}
+        okText="确认驳回"
+        okButtonProps={{ danger: true }}
+        confirmLoading={approvalActionLoading}
+      >
+        <Form form={rejectForm} layout="vertical" onFinish={handleReject}>
+          <Form.Item name="operator" label="审批人姓名" rules={[{ required: true, message: '请输入审批人姓名' }]}>
+            <Input placeholder="请输入审批人姓名" />
+          </Form.Item>
+          <Form.Item name="remark" label="驳回理由" rules={[{ required: true, message: '请输入驳回理由' }]}>
+            <Input.TextArea rows={4} placeholder="请详细说明驳回理由，以便修改后重新提交" maxLength={1000} showCount />
+          </Form.Item>
+        </Form>
       </Modal>
     </Space>
   );
