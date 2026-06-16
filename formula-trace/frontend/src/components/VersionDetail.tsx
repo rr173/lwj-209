@@ -1623,31 +1623,36 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       <Card size="small" title={<Space><HistoryOutlined /> 审批历史</Space>} loading={approvalHistoryLoading}>
         {approvalHistory.length > 0 ? (
           <Timeline
-            items={approvalHistory.map(record => ({
-              color: record.action === 'approve' ? 'green' : record.action === 'reject' ? 'red' : record.action === 'submit' ? 'blue' : 'gray',
-              children: (
-                <div>
-                  <Space>
-                    <Tag color={
-                      record.action === 'submit' ? 'blue' :
-                      record.action === 'approve' ? 'green' :
-                      record.action === 'reject' ? 'red' : 'default'
-                    }>
-                      {record.action === 'submit' ? '提交审批' :
-                       record.action === 'approve' ? '审批通过' :
-                       record.action === 'reject' ? '驳回' : record.action}
-                    </Tag>
-                    <Text strong>{record.operator}</Text>
-                    <Text type="secondary">{new Date(record.created_at).toLocaleString('zh-CN')}</Text>
-                  </Space>
-                  {record.remark && (
-                    <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4 }}>
-                      <Text type="secondary">备注：</Text>{record.remark}
-                    </div>
-                  )}
-                </div>
-              )
-            }))}
+            items={approvalHistory.map(record => {
+              const actionMap: Record<string, { label: string; color: string; timelineColor: string }> = {
+                submit: { label: '提交审批', color: 'blue', timelineColor: 'blue' },
+                approve: { label: '审批通过', color: 'green', timelineColor: 'green' },
+                reject: { label: '驳回', color: 'red', timelineColor: 'red' },
+                review_approve: { label: '评审通过', color: 'green', timelineColor: 'green' },
+                review_conditional: { label: '评审有条件通过', color: 'orange', timelineColor: 'orange' },
+                review_reject: { label: '评审否决', color: 'red', timelineColor: 'red' },
+              };
+              const actionInfo = actionMap[record.action] || { label: record.action, color: 'default', timelineColor: 'gray' };
+              return {
+                color: actionInfo.timelineColor,
+                children: (
+                  <div>
+                    <Space>
+                      <Tag color={actionInfo.color}>
+                        {actionInfo.label}
+                      </Tag>
+                      <Text strong>{record.operator}</Text>
+                      <Text type="secondary">{new Date(record.created_at).toLocaleString('zh-CN')}</Text>
+                    </Space>
+                    {record.remark && (
+                      <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4 }}>
+                        <Text type="secondary">备注：</Text>{record.remark}
+                      </div>
+                    )}
+                  </div>
+                )
+              };
+            })}
           />
         ) : (
           <Empty description="暂无审批记录" />

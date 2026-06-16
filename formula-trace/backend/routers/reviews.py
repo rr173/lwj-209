@@ -308,6 +308,22 @@ async def end_review_meeting(meeting_id: int, db: AsyncSession = Depends(get_db)
                     remark=f"评审会议通过，平均分{final_score:.2f}，自动提交审批"
                 )
                 db.add(record)
+            else:
+                record = ApprovalRecord(
+                    version_id=version_id,
+                    action="review_approve",
+                    operator="评审会议",
+                    remark=f"评审会议通过，平均分{final_score:.2f}（当前版本已发布，未改变审批状态）"
+                )
+                db.add(record)
+        elif decision == "conditional":
+            record = ApprovalRecord(
+                version_id=version_id,
+                action="review_conditional",
+                operator="评审会议",
+                remark=f"评审会议有条件通过，平均分{final_score:.2f}，请根据评委意见完善后手动提交审批"
+            )
+            db.add(record)
         elif decision == "reject":
             record = ApprovalRecord(
                 version_id=version_id,
@@ -330,16 +346,37 @@ async def get_version_reviews(version_id: int, db: AsyncSession = Depends(get_db
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="配方版本不存在")
 
+    decisions_result = await db.execute(
+        select(ReviewDecision).where(ReviewDecision.version_id == version_id)
+    )
+    decisions = decisions_result.scalars().all()
+    decision_meeting_ids = {d.meeting_id for d in decisions}
+
+    scores_result = await db.execute(
+        select(ReviewScore).where(ReviewScore.version_id == version_id)
+    )
+    scores = scores_result.scalars().all()
+    score_meeting_ids = {s.meeting_id for s in scores}
+
+    direct_meetings_result = await db.execute(
+        select(ReviewMeeting)
+        .order_by(ReviewMeeting.created_at.desc())
+    )
+    direct_meetings = direct_meetings_result.scalars().all()
+    direct_meeting_ids = {m.id for m in direct_meetings if version_id in m.version_ids}
+
+    all_meeting_ids = decision_meeting_ids | score_meeting_ids | direct_meeting_ids
+
     meetings_result = await db.execute(
         select(ReviewMeeting)
-        .where(ReviewMeeting.version_ids.contains([version_id]))
+        .where(ReviewMeeting.id.in_(list(all_meeting_ids)))
         .order_by(ReviewMeeting.created_at.desc())
     )
     meetings = meetings_result.scalars().all()
 
     records = []
     for meeting in meetings:
-        scores_result = await db.execute(
+        meeting_scores_result = await db.execute(
             select(ReviewScore).where(
                 and_(
                     ReviewScore.meeting_id == meeting.id,
@@ -347,7 +384,7 @@ async def get_version_reviews(version_id: int, db: AsyncSession = Depends(get_db
                 )
             )
         )
-        scores = scores_result.scalars().all()
+        meeting_scores = meeting_scores_result.scalars().all()
 
         decision_result = await db.execute(
             select(ReviewDecision).where(
@@ -359,10 +396,10 @@ async def get_version_reviews(version_id: int, db: AsyncSession = Depends(get_db
         )
         decision = decision_result.scalar_one_or_none()
 
-        if scores:
-            avg_rationality = sum(s.rationality_score for s in scores) / len(scores)
-            avg_cost = sum(s.cost_score for s in scores) / len(scores)
-            avg_feasibility = sum(s.feasibility_score for s in scores) / len(scores)
+        if meeting_scores:
+            avg_rationality = sum(s.rationality_score for s in meeting_scores) / len(meeting_scores)
+            avg_cost = sum(s.cost_score for s in meeting_scores) / len(meeting_scores)
+            avg_feasibility = sum(s.feasibility_score for s in meeting_scores) / len(meeting_scores)
             final_score = (avg_rationality + avg_cost + avg_feasibility) / 3
         else:
             avg_rationality = None
@@ -376,12 +413,12 @@ async def get_version_reviews(version_id: int, db: AsyncSession = Depends(get_db
                 meeting_title=meeting.title,
                 meeting_date=meeting.review_date,
                 meeting_status=meeting.status,
-                avg_rationality=round(avg_rationality, 2) if avg_rationality else None,
-                avg_cost=round(avg_cost, 2) if avg_cost else None,
-                avg_feasibility=round(avg_feasibility, 2) if avg_feasibility else None,
-                final_score=round(final_score, 2) if final_score else None,
+                avg_rationality=round(avg_rationality, 2) if avg_rationality is not None else None,
+                avg_cost=round(avg_cost, 2) if avg_cost is not None else None,
+                avg_feasibility=round(avg_feasibility, 2) if avg_feasibility is not None else None,
+                final_score=round(final_score, 2) if final_score is not None else None,
                 decision=decision.decision if decision else None,
-                judge_scores=[ReviewScoreResponse.model_validate(s) for s in scores],
+                judge_scores=[ReviewScoreResponse.model_validate(s) for s in meeting_scores],
             )
         )
 
