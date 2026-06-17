@@ -48,6 +48,10 @@ import type {
   ExperimentListItem,
   ExperimentDetailResponse,
   ExperimentComparisonResponse,
+  LifecycleTimelineResponse,
+  Milestone,
+  MilestoneCreate,
+  ProductLineLifecycleStats,
 } from './types';
 
 const API_BASE = '/api';
@@ -299,6 +303,31 @@ export const api = {
 
   getExperimentComparison: (experimentId: number): Promise<ExperimentComparisonResponse> =>
     axios.get(`${API_BASE}/experiments/${experimentId}/comparison`).then(r => r.data),
+
+  getVersionTimeline: (versionId: number): Promise<LifecycleTimelineResponse> =>
+    axios.get(`${API_BASE}/lifecycle/version/${versionId}/timeline`).then(r => r.data),
+
+  createMilestone: (data: MilestoneCreate): Promise<Milestone> =>
+    axios.post(`${API_BASE}/lifecycle/milestones`, data).then(r => r.data),
+
+  getVersionMilestones: (versionId: number): Promise<Milestone[]> =>
+    axios.get(`${API_BASE}/lifecycle/version/${versionId}/milestones`).then(r => r.data),
+
+  getProductLinePendingMilestones: (productLineId: number, includeOverdue: boolean = true): Promise<Milestone[]> =>
+    axios.get(`${API_BASE}/lifecycle/product-line/${productLineId}/milestones/pending`, {
+      params: { include_overdue: includeOverdue }
+    }).then(r => r.data),
+
+  completeMilestone: (milestoneId: number, actualCompletionDate?: string): Promise<Milestone> =>
+    axios.post(`${API_BASE}/lifecycle/milestones/${milestoneId}/complete`, {
+      actual_completion_date: actualCompletionDate || null
+    }).then(r => r.data),
+
+  deleteMilestone: (milestoneId: number): Promise<void> =>
+    axios.delete(`${API_BASE}/lifecycle/milestones/${milestoneId}`).then(r => r.data),
+
+  getProductLineLifecycleStats: (productLineId: number): Promise<ProductLineLifecycleStats> =>
+    axios.get(`${API_BASE}/lifecycle/product-line/${productLineId}/stats`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

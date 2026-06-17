@@ -1007,3 +1007,56 @@ class ExperimentComparisonResponse(BaseModel):
     pairwise_diffs: list[ExperimentPairDiff]
     recommended_version_id: int
     recommended_version_number: int
+
+
+class LifecycleEvent(BaseModel):
+    event_type: str
+    event_time: datetime
+    description: str
+    operator: Optional[str] = None
+    extra: Optional[dict] = None
+
+
+class LifecycleTimelineResponse(BaseModel):
+    version_id: int
+    version_number: int
+    derived_from: Optional[dict] = None
+    events: list[LifecycleEvent]
+
+
+class MilestoneCreate(BaseModel):
+    version_id: int
+    name: str = Field(..., min_length=1, max_length=200)
+    target_date: date
+
+
+class MilestoneUpdate(BaseModel):
+    pass
+
+
+class MilestoneComplete(BaseModel):
+    actual_completion_date: Optional[date] = None
+
+
+class MilestoneResponse(BaseModel):
+    id: int
+    version_id: int
+    version_number: Optional[int] = None
+    product_line_id: Optional[int] = None
+    name: str
+    target_date: date
+    status: str
+    actual_completion_date: Optional[date]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ProductLineLifecycleStats(BaseModel):
+    product_line_id: int
+    avg_days_to_first_batch: Optional[float]
+    avg_days_from_batch_to_approval: Optional[float]
+    avg_version_survival_rounds: Optional[float]
+    overdue_milestone_count: int

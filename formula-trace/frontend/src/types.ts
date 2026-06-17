@@ -708,3 +708,50 @@ export interface ExperimentComparisonResponse {
   recommended_version_id: number;
   recommended_version_number: number;
 }
+
+export interface LifecycleEvent {
+  event_type: string;
+  event_time: string;
+  description: string;
+  operator: string | null;
+  extra: Record<string, any> | null;
+}
+
+export interface LifecycleTimelineResponse {
+  version_id: number;
+  version_number: number;
+  derived_from: {
+    parent_id: number;
+    parent_version_number: number;
+  } | null;
+  events: LifecycleEvent[];
+}
+
+export type MilestoneStatus = 'pending' | 'completed' | 'overdue';
+
+export interface Milestone {
+  id: number;
+  version_id: number;
+  version_number: number | null;
+  product_line_id: number | null;
+  name: string;
+  target_date: string;
+  status: MilestoneStatus;
+  actual_completion_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MilestoneCreate {
+  version_id: number;
+  name: string;
+  target_date: string;
+}
+
+export interface ProductLineLifecycleStats {
+  product_line_id: number;
+  avg_days_to_first_batch: number | null;
+  avg_days_from_batch_to_approval: number | null;
+  avg_version_survival_rounds: number | null;
+  overdue_milestone_count: number;
+}

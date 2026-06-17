@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline, Checkbox, Collapse } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined, StarFilled, ClockCircleOutlined, ScheduleOutlined, FlagOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse } from '../types';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate } from '../types';
 import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor } from '../api';
 
 const { Title, Text } = Typography;
@@ -82,6 +82,18 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [impactAnalysisData, setImpactAnalysisData] = useState<ImpactAnalysisResponse | null>(null);
   const [impactAnalysisLoading, setImpactAnalysisLoading] = useState(false);
   const [showImpactPreview, setShowImpactPreview] = useState(false);
+
+  const [timelineData, setTimelineData] = useState<LifecycleTimelineResponse | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
+
+  const [versionMilestones, setVersionMilestones] = useState<Milestone[]>([]);
+  const [milestoneLoading, setMilestoneLoading] = useState(false);
+  const [createMilestoneVisible, setCreateMilestoneVisible] = useState(false);
+  const [milestoneForm] = Form.useForm();
+
+  const [lifecycleStats, setLifecycleStats] = useState<ProductLineLifecycleStats | null>(null);
+  const [lifecycleStatsLoading, setLifecycleStatsLoading] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -192,6 +204,120 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       });
     return () => { cancelled = true; };
   }, [version.product_line_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTimelineLoading(true);
+    api.getVersionTimeline(version.id)
+      .then(data => {
+        if (!cancelled) setTimelineData(data);
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载时间线数据失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTimelineLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMilestoneLoading(true);
+    api.getVersionMilestones(version.id)
+      .then(data => {
+        if (!cancelled) setVersionMilestones(data);
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载里程碑数据失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setMilestoneLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLifecycleStatsLoading(true);
+    api.getProductLineLifecycleStats(version.product_line_id)
+      .then(data => {
+        if (!cancelled) setLifecycleStats(data);
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载生命周期统计失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLifecycleStatsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.product_line_id]);
+
+  const refreshMilestones = useCallback(async () => {
+    try {
+      const data = await api.getVersionMilestones(version.id);
+      setVersionMilestones(data);
+    } catch (e) {
+      message.error('刷新里程碑失败');
+    }
+  }, [version.id]);
+
+  const handleCreateMilestone = useCallback(async (values: any) => {
+    try {
+      await api.createMilestone({
+        version_id: version.id,
+        name: values.name,
+        target_date: values.target_date.format('YYYY-MM-DD'),
+      });
+      message.success('里程碑创建成功');
+      setCreateMilestoneVisible(false);
+      milestoneForm.resetFields();
+      await refreshMilestones();
+      const timeline = await api.getVersionTimeline(version.id);
+      setTimelineData(timeline);
+      const stats = await api.getProductLineLifecycleStats(version.product_line_id);
+      setLifecycleStats(stats);
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.detail || '创建里程碑失败';
+      message.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    }
+  }, [version.id, version.product_line_id, milestoneForm, refreshMilestones]);
+
+  const handleCompleteMilestone = useCallback(async (milestoneId: number) => {
+    try {
+      await api.completeMilestone(milestoneId);
+      message.success('里程碑已标记完成');
+      await refreshMilestones();
+      const timeline = await api.getVersionTimeline(version.id);
+      setTimelineData(timeline);
+      const stats = await api.getProductLineLifecycleStats(version.product_line_id);
+      setLifecycleStats(stats);
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.detail || '操作失败';
+      message.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    }
+  }, [version.id, version.product_line_id, refreshMilestones]);
+
+  const handleDeleteMilestone = useCallback(async (milestoneId: number) => {
+    try {
+      await api.deleteMilestone(milestoneId);
+      message.success('里程碑已删除');
+      await refreshMilestones();
+      const timeline = await api.getVersionTimeline(version.id);
+      setTimelineData(timeline);
+      const stats = await api.getProductLineLifecycleStats(version.product_line_id);
+      setLifecycleStats(stats);
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.detail || '删除失败';
+      message.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    }
+  }, [version.id, version.product_line_id, refreshMilestones]);
 
   const ingredientOptions = useMemo(() => {
     const names = new Set<string>();
@@ -2325,8 +2451,310 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     </Space>
   );
 
+  const getTimelineItemProps = (event: LifecycleEvent) => {
+    const isMilestone = event.event_type.startsWith('milestone_');
+    if (isMilestone) {
+      const status = event.event_type.replace('milestone_', '');
+      if (status === 'overdue') {
+        return {
+          color: 'red',
+          dot: <StarFilled style={{ fontSize: 16 }} />,
+        };
+      } else if (status === 'completed') {
+        return {
+          color: 'green',
+          dot: <StarFilled style={{ fontSize: 16 }} />,
+        };
+      } else {
+        return {
+          color: 'gold',
+          dot: <StarFilled style={{ fontSize: 16 }} />,
+        };
+      }
+    }
+    return {
+      color: 'blue',
+    };
+  };
+
+  const formatEventTime = (timeStr: string) => {
+    try {
+      const date = new Date(timeStr);
+      if (isNaN(date.getTime())) return timeStr;
+      if (date.getFullYear() === 1) return timeStr;
+      return date.toLocaleString('zh-CN');
+    } catch {
+      return timeStr;
+    }
+  };
+
+  const renderTimelineTab = () => {
+    const displayEvents = timelineExpanded
+      ? (timelineData?.events || [])
+      : (timelineData?.events || []).slice(-10);
+    const totalCount = timelineData?.events?.length || 0;
+
+    return (
+      <Space direction="vertical" size={24} style={{ width: '100%' }}>
+        <Card
+          size="small"
+          title={<Space><ClockCircleOutlined /> 生命周期概览</Space>}
+          extra={
+            <Space>
+              {timelineData?.derived_from && (
+                <Tag color="cyan" icon={<RiseOutlined />}>
+                  派生自 V{timelineData.derived_from.parent_version_number}
+                </Tag>
+              )}
+              <Tag color="blue">共 {totalCount} 个事件</Tag>
+              <Button
+                type="dashed"
+                icon={<PlusOutlined />}
+                onClick={() => setCreateMilestoneVisible(true)}
+              >
+                添加里程碑
+              </Button>
+            </Space>
+          }
+        >
+          <Row gutter={16}>
+            <Col span={6}>
+              <Statistic
+                title="版本修改轮次"
+                value={timelineData?.events?.filter(e => e.event_type.startsWith('approval_')).length || 0}
+                prefix={<HistoryOutlined />}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="试产批次"
+                value={timelineData?.events?.filter(e => e.event_type === 'first_batch_created' || e.event_type === 'batch_test_result').length || 0}
+                prefix={<ExperimentOutlined />}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="评审引用次数"
+                value={timelineData?.events?.filter(e => e.event_type === 'review_referenced').length || 0}
+                prefix={<AuditOutlined />}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="里程碑"
+                value={versionMilestones.length}
+                prefix={<StarFilled style={{ color: '#faad14' }} />}
+                valueStyle={{
+                  color: versionMilestones.some(m => m.status === 'overdue') ? '#f5222d' : undefined
+                }}
+              />
+            </Col>
+          </Row>
+        </Card>
+
+        {versionMilestones.length > 0 && (
+          <Card
+            size="small"
+            title={<Space><FlagOutlined /> 里程碑列表</Space>}
+            loading={milestoneLoading}
+          >
+            <Table
+              size="small"
+              dataSource={versionMilestones.map(m => ({ key: m.id, ...m }))}
+              pagination={false}
+              columns={[
+                {
+                  title: '里程碑名称',
+                  dataIndex: 'name',
+                  key: 'name',
+                  render: (v: string, record: any) => (
+                    <Space>
+                      <StarFilled style={{
+                        color: record.status === 'overdue' ? '#f5222d' :
+                               record.status === 'completed' ? '#52c41a' : '#faad14'
+                      }} />
+                      <Text strong>{v}</Text>
+                      {record.status === 'overdue' && <Tag color="red">已逾期</Tag>}
+                      {record.status === 'completed' && <Tag color="green">已完成</Tag>}
+                      {record.status === 'pending' && <Tag color="gold">待完成</Tag>}
+                    </Space>
+                  )
+                },
+                { title: '目标日期', dataIndex: 'target_date', key: 'target_date', width: 140 },
+                {
+                  title: '实际完成',
+                  dataIndex: 'actual_completion_date',
+                  key: 'actual_completion_date',
+                  width: 140,
+                  render: (v: string | null) => v || <Text type="secondary">-</Text>
+                },
+                {
+                  title: '操作',
+                  key: 'actions',
+                  width: 180,
+                  render: (_: any, record: any) => (
+                    <Space size="small">
+                      {record.status !== 'completed' && (
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<CheckCircleOutlined />}
+                          onClick={() => handleCompleteMilestone(record.id)}
+                        >
+                          标记完成
+                        </Button>
+                      )}
+                      <Popconfirm
+                        title="确定删除该里程碑？"
+                        onConfirm={() => handleDeleteMilestone(record.id)}
+                        okText="删除"
+                        cancelText="取消"
+                      >
+                        <Button
+                          type="link"
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                        >
+                          删除
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  )
+                }
+              ]}
+            />
+          </Card>
+        )}
+
+        <Card
+          size="small"
+          title={<Space><ScheduleOutlined /> 完整时间线</Space>}
+          loading={timelineLoading}
+          extra={
+            totalCount > 10 && (
+              <Button
+                type="link"
+                onClick={() => setTimelineExpanded(!timelineExpanded)}
+              >
+                {timelineExpanded ? '收起（仅显示最近10条）' : `展开全部（${totalCount}条）`}
+              </Button>
+            )
+          }
+        >
+          {timelineData && timelineData.events && timelineData.events.length > 0 ? (
+            <Timeline
+              style={{ padding: '16px 8px' }}
+              items={displayEvents.map((event, idx) => {
+                const props = getTimelineItemProps(event);
+                return {
+                  ...props,
+                  children: (
+                    <div style={{ marginBottom: idx === displayEvents.length - 1 ? 0 : 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                        <div style={{ flex: 1 }}>
+                          <Space wrap size={[8, 4]}>
+                            <Text strong>{event.description}</Text>
+                            {event.operator && (
+                              <Tag color="blue">{event.operator}</Tag>
+                            )}
+                          </Space>
+                        </div>
+                        <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                          {formatEventTime(event.event_time)}
+                        </Text>
+                      </div>
+                    </div>
+                  ),
+                };
+              })}
+            />
+          ) : (
+            <Empty description="暂无时间线数据" />
+          )}
+        </Card>
+      </Space>
+    );
+  };
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Card
+        size="small"
+        loading={lifecycleStatsLoading}
+        style={{
+          background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%)',
+          borderLeft: '4px solid #1890ff',
+        }}
+      >
+        <Row gutter={[24, 12]} align="middle">
+          <Col flex="auto">
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Space align="center">
+                <ScheduleOutlined style={{ fontSize: 20, color: '#1890ff' }} />
+                <Text strong style={{ fontSize: 16 }}>产品线生命周期统计</Text>
+              </Space>
+            </Space>
+          </Col>
+          <Col>
+            <Statistic
+              title={
+                <Space size={4}>
+                  <ClockCircleOutlined style={{ color: '#52c41a' }} />
+                  <span>平均试产周期</span>
+                </Space>
+              }
+              value={lifecycleStats?.avg_days_to_first_batch ?? '-'}
+              suffix={lifecycleStats?.avg_days_to_first_batch !== null && lifecycleStats?.avg_days_to_first_batch !== undefined ? '天' : ''}
+              valueStyle={{ fontSize: 20, fontWeight: 700, color: '#52c41a' }}
+            />
+          </Col>
+          <Col>
+            <Statistic
+              title={
+                <Space size={4}>
+                  <AuditOutlined style={{ color: '#1890ff' }} />
+                  <span>平均审批周期</span>
+                </Space>
+              }
+              value={lifecycleStats?.avg_days_from_batch_to_approval ?? '-'}
+              suffix={lifecycleStats?.avg_days_from_batch_to_approval !== null && lifecycleStats?.avg_days_from_batch_to_approval !== undefined ? '天' : ''}
+              valueStyle={{ fontSize: 20, fontWeight: 700, color: '#1890ff' }}
+            />
+          </Col>
+          <Col>
+            <Statistic
+              title={
+                <Space size={4}>
+                  <RiseOutlined style={{ color: '#722ed1' }} />
+                  <span>版本平均存活轮次</span>
+                </Space>
+              }
+              value={lifecycleStats?.avg_version_survival_rounds ?? '-'}
+              valueStyle={{ fontSize: 20, fontWeight: 700, color: '#722ed1' }}
+            />
+          </Col>
+          <Col>
+            <Statistic
+              title={
+                <Space size={4}>
+                  <StarFilled style={{
+                    color: (lifecycleStats?.overdue_milestone_count ?? 0) > 0 ? '#f5222d' : '#faad14'
+                  }} />
+                  <span>逾期里程碑</span>
+                </Space>
+              }
+              value={lifecycleStats?.overdue_milestone_count ?? 0}
+              valueStyle={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: (lifecycleStats?.overdue_milestone_count ?? 0) > 0 ? '#f5222d' : '#52c41a'
+              }}
+            />
+          </Col>
+        </Row>
+      </Card>
+
       <Card
         title={
           <Space>
@@ -2448,6 +2876,11 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'compliance',
               label: <span><GlobalOutlined /> 法规合规</span>,
               children: renderComplianceTab()
+            },
+            {
+              key: 'timeline',
+              label: <span><ScheduleOutlined /> 时间线</span>,
+              children: renderTimelineTab()
             }
           ]}
         />
@@ -3281,6 +3714,52 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
           <Form.Item name="remark" label="驳回理由" rules={[{ required: true, message: '请输入驳回理由' }]}>
             <Input.TextArea rows={4} placeholder="请详细说明驳回理由，以便修改后重新提交" maxLength={1000} showCount />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <FlagOutlined style={{ color: '#faad14' }} />
+            <span>添加里程碑 - V{version.version_number}</span>
+          </Space>
+        }
+        open={createMilestoneVisible}
+        onCancel={() => {
+          setCreateMilestoneVisible(false);
+          milestoneForm.resetFields();
+        }}
+        onOk={() => milestoneForm.submit()}
+        okText="创建里程碑"
+      >
+        <Form form={milestoneForm} layout="vertical" onFinish={handleCreateMilestone}>
+          <Form.Item
+            name="name"
+            label="里程碑名称"
+            rules={[
+              { required: true, message: '请输入里程碑名称' },
+              { max: 200, message: '名称不能超过200个字符' }
+            ]}
+          >
+            <Input
+              placeholder="例如：首次稳定性测试、客户样品确认等"
+              maxLength={200}
+              showCount
+            />
+          </Form.Item>
+          <Form.Item
+            name="target_date"
+            label="目标日期"
+            rules={[{ required: true, message: '请选择目标日期' }]}
+          >
+            <DatePicker style={{ width: '100%' }} placeholder="选择目标完成日期" />
+          </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            message="里程碑提示"
+            description="里程碑到达目标日期但未标记完成时，系统会自动标记为已逾期。同一版本下不允许创建同名里程碑。"
+          />
         </Form>
       </Modal>
     </Space>

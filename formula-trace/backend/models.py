@@ -51,6 +51,7 @@ class FormulaVersion(Base):
     parent_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=True)
     ingredients: Mapped[list] = mapped_column(JSON, nullable=False)
     approval_status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     product_line = relationship("ProductLine", back_populates="versions")
     parent = relationship("FormulaVersion", remote_side=[id], back_populates="children")
@@ -312,3 +313,35 @@ class ExperimentBatchLink(Base):
 
     version_link = relationship("ExperimentVersionLink", back_populates="batch_links")
     batch = relationship("Batch")
+
+
+class Milestone(Base):
+    __tablename__ = "milestones"
+    __table_args__ = (
+        UniqueConstraint("version_id", "name", name="unique_milestone_per_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    target_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    actual_completion_date: Mapped[date] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)
+
+    version = relationship("FormulaVersion")
+
+
+class ComplianceCheckRecord(Base):
+    __tablename__ = "compliance_check_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False)
+    target_market: Mapped[str] = mapped_column(String(50), nullable=False)
+    product_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    overall_conclusion: Mapped[str] = mapped_column(String(50), nullable=False)
+    compliance_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    version = relationship("FormulaVersion")

@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_
 from database import get_db
-from models import Regulation, FormulaVersion
+from models import Regulation, FormulaVersion, ComplianceCheckRecord
 from schemas import (
     RegulationCreate, RegulationUpdate, RegulationResponse,
     RegulationBatchImportResult, ComplianceReportResponse,
@@ -289,6 +289,16 @@ async def check_compliance(
         overall_conclusion = "存在超限"
     else:
         overall_conclusion = "全部合规"
+
+    check_record = ComplianceCheckRecord(
+        version_id=version.id,
+        target_market=data.target_market,
+        product_category=data.product_category,
+        overall_conclusion=overall_conclusion,
+        compliance_rate=compliance_rate,
+    )
+    db.add(check_record)
+    await db.commit()
 
     return ComplianceReportResponse(
         version_id=version.id,
