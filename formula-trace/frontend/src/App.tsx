@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Layout, Menu, Space, Button, Select, Modal, message, Input, Typography } from 'antd';
-import { ReloadOutlined, BarChartOutlined, SearchOutlined, DatabaseOutlined, HomeOutlined, AuditOutlined, TrophyOutlined } from '@ant-design/icons';
+import { ReloadOutlined, BarChartOutlined, SearchOutlined, DatabaseOutlined, HomeOutlined, AuditOutlined, TrophyOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import type { ProductLine, VersionTreeNode, FormulaVersion, Batch, TracePathResponse } from './types';
 import { api, collectVersionIds } from './api';
@@ -12,6 +12,8 @@ import InventoryPage from './components/InventoryPage';
 import ReviewListPage from './components/ReviewListPage';
 import ReviewDetailPage from './components/ReviewDetailPage';
 import BenchmarkingPage from './components/BenchmarkingPage';
+import ExperimentListPage from './components/ExperimentListPage';
+import ExperimentDetailPage from './components/ExperimentDetailPage';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -34,6 +36,7 @@ function FormulaPage() {
   const menuItems = [
     { key: '/', icon: <HomeOutlined />, label: '配方管理' },
     { key: '/benchmarking', icon: <TrophyOutlined />, label: '对标分析' },
+    { key: '/experiments', icon: <ExperimentOutlined />, label: '实验测试' },
     { key: '/reviews', icon: <AuditOutlined />, label: '评审会议' },
     { key: '/inventory', icon: <DatabaseOutlined />, label: '库存管理' },
   ];
@@ -278,6 +281,7 @@ function BenchmarkingPageWithHeader() {
   const menuItems = [
     { key: '/', icon: <HomeOutlined />, label: '配方管理' },
     { key: '/benchmarking', icon: <TrophyOutlined />, label: '对标分析' },
+    { key: '/experiments', icon: <ExperimentOutlined />, label: '实验测试' },
     { key: '/reviews', icon: <AuditOutlined />, label: '评审会议' },
     { key: '/inventory', icon: <DatabaseOutlined />, label: '库存管理' },
   ];
@@ -304,12 +308,48 @@ function BenchmarkingPageWithHeader() {
   );
 }
 
+function ExperimentPageWithHeader() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const menuItems = [
+    { key: '/', icon: <HomeOutlined />, label: '配方管理' },
+    { key: '/benchmarking', icon: <TrophyOutlined />, label: '对标分析' },
+    { key: '/experiments', icon: <ExperimentOutlined />, label: '实验测试' },
+    { key: '/reviews', icon: <AuditOutlined />, label: '评审会议' },
+    { key: '/inventory', icon: <DatabaseOutlined />, label: '库存管理' },
+  ];
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header className="app-header" style={{ padding: '0 24px' }}>
+        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+          <Space>
+            <h1 style={{ color: 'white', margin: 0, fontSize: 20 }}>化妆品配方版本管理与批次追溯系统</h1>
+          </Space>
+          <Menu
+            theme="dark"
+            mode="horizontal"
+            selectedKeys={[location.pathname.startsWith('/experiments') ? '/experiments' : location.pathname]}
+            items={menuItems}
+            onClick={({ key }) => navigate(key as string)}
+            style={{ minWidth: 300, background: 'transparent' }}
+          />
+        </Space>
+      </Header>
+      <ExperimentListPage />
+    </Layout>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<FormulaPage />} />
         <Route path="/benchmarking" element={<BenchmarkingPageWithHeader />} />
+        <Route path="/experiments" element={<ExperimentPageWithHeader />} />
+        <Route path="/experiments/:id" element={<ExperimentDetailPage />} />
         <Route path="/reviews" element={<ReviewListPage />} />
         <Route path="/reviews/:id" element={<ReviewDetailPage />} />
         <Route path="/inventory" element={<InventoryPage />} />

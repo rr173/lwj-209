@@ -250,3 +250,65 @@ class CompetitorFormula(Base):
     ingredients: Mapped[list] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)
+
+
+class ExperimentPlan(Base):
+    __tablename__ = "experiment_plans"
+    __table_args__ = (
+        UniqueConstraint("name", name="unique_experiment_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String(1000), nullable=False)
+    product_line_id: Mapped[int] = mapped_column(Integer, ForeignKey("product_lines.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="planning")
+    skin_feel_weight: Mapped[float] = mapped_column(Float, nullable=False)
+    stability_weight: Mapped[float] = mapped_column(Float, nullable=False)
+    cost_weight: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    product_line = relationship("ProductLine")
+    version_links = relationship("ExperimentVersionLink", back_populates="experiment", cascade="all, delete-orphan")
+
+    @property
+    def version_count(self) -> int:
+        return len(self.version_links)
+
+
+class ExperimentVersionLink(Base):
+    __tablename__ = "experiment_version_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment_plans.id"), nullable=False)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    experiment = relationship("ExperimentPlan", back_populates="version_links")
+    version = relationship("FormulaVersion")
+    batch_links = relationship("ExperimentBatchLink", back_populates="version_link", cascade="all, delete-orphan")
+
+    @property
+    def batch_count(self) -> int:
+        return len(self.batch_links)
+
+    @property
+    def tested_batch_count(self) -> int:
+        return sum(1 for bl in self.batch_links if bl.batch and bl.batch.has_test_result)
+
+
+class ExperimentBatchLink(Base):
+    __tablename__ = "experiment_batch_links"
+    __table_args__ = (
+        UniqueConstraint("experiment_version_link_id", "batch_id", name="unique_experiment_batch_link"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    experiment_version_link_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment_version_links.id"), nullable=False)
+    batch_id: Mapped[int] = mapped_column(Integer, ForeignKey("batches.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    version_link = relationship("ExperimentVersionLink", back_populates="batch_links")
+    batch = relationship("Batch")

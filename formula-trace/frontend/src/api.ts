@@ -44,6 +44,10 @@ import type {
   CompetitorFormulaCreate,
   EstimationResponse,
   GapAnalysisResponse,
+  ExperimentCreate,
+  ExperimentListItem,
+  ExperimentDetailResponse,
+  ExperimentComparisonResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -248,6 +252,53 @@ export const api = {
     axios.get(`${API_BASE}/benchmarking/${competitorId}/compare/${versionId}`, {
       params: { target_market: targetMarket, product_category: productCategory }
     }).then(r => r.data),
+
+  createExperiment: (data: ExperimentCreate): Promise<ExperimentDetailResponse> =>
+    axios.post(`${API_BASE}/experiments`, data).then(r => r.data),
+
+  listExperiments: (): Promise<ExperimentListItem[]> =>
+    axios.get(`${API_BASE}/experiments`).then(r => r.data),
+
+  getExperiment: (experimentId: number): Promise<ExperimentDetailResponse> =>
+    axios.get(`${API_BASE}/experiments/${experimentId}`).then(r => r.data),
+
+  updateExperimentWeights: (experimentId: number, data: {
+    skin_feel_weight: number;
+    stability_weight: number;
+    cost_weight: number;
+  }): Promise<ExperimentDetailResponse> =>
+    axios.put(`${API_BASE}/experiments/${experimentId}/weights`, data).then(r => r.data),
+
+  startExperiment: (experimentId: number): Promise<ExperimentDetailResponse> =>
+    axios.post(`${API_BASE}/experiments/${experimentId}/start`).then(r => r.data),
+
+  completeExperiment: (experimentId: number): Promise<ExperimentDetailResponse> =>
+    axios.post(`${API_BASE}/experiments/${experimentId}/complete`).then(r => r.data),
+
+  linkBatchToExperiment: (experimentId: number, versionId: number, batchId: number): Promise<ExperimentDetailResponse> =>
+    axios.post(`${API_BASE}/experiments/${experimentId}/link-batch`, {
+      version_id: versionId,
+      batch_id: batchId,
+    }).then(r => r.data),
+
+  unlinkBatchFromExperiment: (experimentId: number, versionId: number, batchId: number): Promise<ExperimentDetailResponse> =>
+    axios.post(`${API_BASE}/experiments/${experimentId}/unlink-batch`, {
+      version_id: versionId,
+      batch_id: batchId,
+    }).then(r => r.data),
+
+  createBatchInExperiment: (experimentId: number, data: {
+    version_id: number;
+    production_date: string;
+    production_amount: number;
+  }): Promise<Batch> =>
+    axios.post(`${API_BASE}/experiments/${experimentId}/create-batch`, data).then(r => r.data),
+
+  getAvailableBatches: (experimentId: number, versionId: number): Promise<Batch[]> =>
+    axios.get(`${API_BASE}/experiments/${experimentId}/available-batches/${versionId}`).then(r => r.data),
+
+  getExperimentComparison: (experimentId: number): Promise<ExperimentComparisonResponse> =>
+    axios.get(`${API_BASE}/experiments/${experimentId}/comparison`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {
@@ -354,6 +405,33 @@ export function getDecisionTagColor(decision: string): string {
     case 'approve': return 'success';
     case 'conditional': return 'warning';
     case 'reject': return 'error';
+    default: return 'default';
+  }
+}
+
+export function getExperimentStatusLabel(status: string): string {
+  switch (status) {
+    case 'planning': return '规划中';
+    case 'ongoing': return '进行中';
+    case 'completed': return '已完成';
+    default: return status;
+  }
+}
+
+export function getExperimentStatusColor(status: string): string {
+  switch (status) {
+    case 'planning': return '#8c8c8c';
+    case 'ongoing': return '#1890ff';
+    case 'completed': return '#52c41a';
+    default: return '#8c8c8c';
+  }
+}
+
+export function getExperimentStatusTagColor(status: string): string {
+  switch (status) {
+    case 'planning': return 'default';
+    case 'ongoing': return 'processing';
+    case 'completed': return 'success';
     default: return 'default';
   }
 }

@@ -839,3 +839,171 @@ class GapAnalysisResponse(BaseModel):
     total_score: float
     max_score: float
     gap_score_percentage: float
+
+
+class ExperimentMetricWeights(BaseModel):
+    skin_feel_weight: float = Field(..., ge=0, le=1)
+    stability_weight: float = Field(..., ge=0, le=1)
+    cost_weight: float = Field(..., ge=0, le=1)
+
+    @field_validator('skin_feel_weight', 'stability_weight', 'cost_weight')
+    @classmethod
+    def round_weights(cls, v):
+        return round(v, 4)
+
+
+class ExperimentCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    purpose: str = Field(..., min_length=1, max_length=1000)
+    version_ids: list[int] = Field(..., min_length=2, max_length=6)
+    skin_feel_weight: float = Field(..., ge=0, le=1)
+    stability_weight: float = Field(..., ge=0, le=1)
+    cost_weight: float = Field(..., ge=0, le=1)
+
+    @field_validator('version_ids')
+    @classmethod
+    def validate_version_ids(cls, v):
+        if len(v) != len(set(v)):
+            raise ValueError("配方版本不能重复")
+        return v
+
+    @field_validator('skin_feel_weight', 'stability_weight', 'cost_weight')
+    @classmethod
+    def round_weights(cls, v):
+        return round(v, 4)
+
+    @field_validator('cost_weight')
+    @classmethod
+    def check_weights_sum(cls, v, values):
+        total = v + values.data.get('skin_feel_weight', 0) + values.data.get('stability_weight', 0)
+        if abs(total - 1.0) > 0.0001:
+            raise ValueError(f'肤感权重、稳定性权重、成本权重之和必须等于1.0，当前为{total}')
+        return v
+
+
+class ExperimentUpdateWeights(BaseModel):
+    skin_feel_weight: float = Field(..., ge=0, le=1)
+    stability_weight: float = Field(..., ge=0, le=1)
+    cost_weight: float = Field(..., ge=0, le=1)
+
+    @field_validator('skin_feel_weight', 'stability_weight', 'cost_weight')
+    @classmethod
+    def round_weights(cls, v):
+        return round(v, 4)
+
+    @field_validator('cost_weight')
+    @classmethod
+    def check_weights_sum(cls, v, values):
+        total = v + values.data.get('skin_feel_weight', 0) + values.data.get('stability_weight', 0)
+        if abs(total - 1.0) > 0.0001:
+            raise ValueError(f'肤感权重、稳定性权重、成本权重之和必须等于1.0，当前为{total}')
+        return v
+
+
+class ExperimentBatchLinkItem(BaseModel):
+    id: int
+    batch_id: int
+    batch_number: str
+    production_date: date
+    skin_feel_score: Optional[float]
+    stability_score: Optional[float]
+    cost_per_kg: Optional[float]
+    has_test_result: bool
+
+
+class ExperimentVersionDetail(BaseModel):
+    link_id: int
+    version_id: int
+    version_number: int
+    ingredients_summary: str
+    batch_count: int
+    tested_batch_count: int
+    avg_skin_feel: Optional[float]
+    avg_stability: Optional[float]
+    avg_cost_normalized: Optional[float]
+    batches: list[ExperimentBatchLinkItem]
+
+
+class ExperimentListItem(BaseModel):
+    id: int
+    name: str
+    status: str
+    version_count: int
+    product_line_id: int
+    product_line_name: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ExperimentDetailResponse(BaseModel):
+    id: int
+    name: str
+    purpose: str
+    product_line_id: int
+    product_line_name: str
+    status: str
+    skin_feel_weight: float
+    stability_weight: float
+    cost_weight: float
+    created_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    versions: list[ExperimentVersionDetail]
+
+    class Config:
+        from_attributes = True
+
+
+class ExperimentLinkBatchRequest(BaseModel):
+    version_id: int
+    batch_id: int
+
+
+class ExperimentCreateBatchRequest(BaseModel):
+    version_id: int
+    production_date: date
+    production_amount: float = Field(..., gt=0)
+
+
+class ExperimentUnlinkBatchRequest(BaseModel):
+    version_id: int
+    batch_id: int
+
+
+class ExperimentVersionScore(BaseModel):
+    version_id: int
+    version_number: int
+    ingredients_summary: str
+    avg_skin_feel: float
+    avg_stability: float
+    avg_cost_normalized: float
+    composite_score: float
+    rank: int
+    is_recommended: bool
+
+
+class ExperimentPairDiff(BaseModel):
+    version_a_id: int
+    version_a_number: int
+    version_b_id: int
+    version_b_number: int
+    score_delta: float
+    score_delta_percentage: float
+    is_significant: bool
+    significance_label: str
+
+
+class ExperimentComparisonResponse(BaseModel):
+    experiment_id: int
+    experiment_name: str
+    skin_feel_weight: float
+    stability_weight: float
+    cost_weight: float
+    max_possible_score: float
+    significance_threshold: float
+    version_scores: list[ExperimentVersionScore]
+    pairwise_diffs: list[ExperimentPairDiff]
+    recommended_version_id: int
+    recommended_version_number: int

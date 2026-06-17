@@ -610,3 +610,101 @@ export interface GapAnalysisResponse {
   max_score: number;
   gap_score_percentage: number;
 }
+
+export type ExperimentStatus = 'planning' | 'ongoing' | 'completed';
+
+export interface ExperimentCreate {
+  name: string;
+  purpose: string;
+  version_ids: number[];
+  skin_feel_weight: number;
+  stability_weight: number;
+  cost_weight: number;
+}
+
+export interface ExperimentBatchLinkItem {
+  id: number;
+  batch_id: number;
+  batch_number: string;
+  production_date: string;
+  skin_feel_score: number | null;
+  stability_score: number | null;
+  cost_per_kg: number | null;
+  has_test_result: boolean;
+}
+
+export interface ExperimentVersionDetail {
+  link_id: number;
+  version_id: number;
+  version_number: number;
+  ingredients_summary: string;
+  batch_count: number;
+  tested_batch_count: number;
+  avg_skin_feel: number | null;
+  avg_stability: number | null;
+  avg_cost_normalized: number | null;
+  batches: ExperimentBatchLinkItem[];
+}
+
+export interface ExperimentListItem {
+  id: number;
+  name: string;
+  status: ExperimentStatus;
+  version_count: number;
+  product_line_id: number;
+  product_line_name: string;
+  created_at: string;
+}
+
+export interface ExperimentDetailResponse {
+  id: number;
+  name: string;
+  purpose: string;
+  product_line_id: number;
+  product_line_name: string;
+  status: ExperimentStatus;
+  skin_feel_weight: number;
+  stability_weight: number;
+  cost_weight: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  versions: ExperimentVersionDetail[];
+}
+
+export interface ExperimentVersionScore {
+  version_id: number;
+  version_number: number;
+  ingredients_summary: string;
+  avg_skin_feel: number;
+  avg_stability: number;
+  avg_cost_normalized: number;
+  composite_score: number;
+  rank: number;
+  is_recommended: boolean;
+}
+
+export interface ExperimentPairDiff {
+  version_a_id: number;
+  version_a_number: number;
+  version_b_id: number;
+  version_b_number: number;
+  score_delta: number;
+  score_delta_percentage: number;
+  is_significant: boolean;
+  significance_label: string;
+}
+
+export interface ExperimentComparisonResponse {
+  experiment_id: number;
+  experiment_name: string;
+  skin_feel_weight: number;
+  stability_weight: number;
+  cost_weight: number;
+  max_possible_score: number;
+  significance_threshold: number;
+  version_scores: ExperimentVersionScore[];
+  pairwise_diffs: ExperimentPairDiff[];
+  recommended_version_id: number;
+  recommended_version_number: number;
+}
