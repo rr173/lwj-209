@@ -39,6 +39,11 @@ import type {
   RegulationBatchImportResult,
   ImpactAnalysisResponse,
   IngredientItem,
+  CompetitorFormulaListItem,
+  CompetitorFormula,
+  CompetitorFormulaCreate,
+  EstimationResponse,
+  GapAnalysisResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -216,6 +221,33 @@ export const api = {
       target_markets: targetMarkets,
       product_category: productCategory
     }, { responseType: 'blob' }).then(r => r.data),
+
+  getCompetitors: (competitorName?: string, productName?: string): Promise<CompetitorFormulaListItem[]> =>
+    axios.get(`${API_BASE}/benchmarking`, {
+      params: { competitor_name: competitorName, product_name: productName }
+    }).then(r => r.data),
+
+  getCompetitor: (competitorId: number): Promise<CompetitorFormula> =>
+    axios.get(`${API_BASE}/benchmarking/${competitorId}`).then(r => r.data),
+
+  createCompetitor: (data: CompetitorFormulaCreate): Promise<CompetitorFormula> =>
+    axios.post(`${API_BASE}/benchmarking`, data).then(r => r.data),
+
+  updateCompetitorIngredients: (competitorId: number, ingredients: { name: string }[]): Promise<CompetitorFormula> =>
+    axios.put(`${API_BASE}/benchmarking/${competitorId}/ingredients`, { ingredients }).then(r => r.data),
+
+  deleteCompetitor: (competitorId: number): Promise<void> =>
+    axios.delete(`${API_BASE}/benchmarking/${competitorId}`).then(r => r.data),
+
+  estimatePercentages: (competitorId: number, targetMarket: string = '中国', productCategory: string = '全身'): Promise<EstimationResponse> =>
+    axios.get(`${API_BASE}/benchmarking/${competitorId}/estimate`, {
+      params: { target_market: targetMarket, product_category: productCategory }
+    }).then(r => r.data),
+
+  gapAnalysis: (competitorId: number, versionId: number, targetMarket: string = '中国', productCategory: string = '全身'): Promise<GapAnalysisResponse> =>
+    axios.get(`${API_BASE}/benchmarking/${competitorId}/compare/${versionId}`, {
+      params: { target_market: targetMarket, product_category: productCategory }
+    }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

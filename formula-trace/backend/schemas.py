@@ -744,3 +744,98 @@ class ImpactAnalysisResponse(BaseModel):
     compliance_risk: ComplianceRiskAnalysis
     stability_impact: StabilityImpactAnalysis
     exclusion_conflicts: list[ExclusionConflictItem]
+
+
+class CompetitorIngredientItem(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+
+
+class CompetitorFormulaCreate(BaseModel):
+    competitor_name: str = Field(..., min_length=1, max_length=200)
+    product_name: str = Field(..., min_length=1, max_length=200)
+    ingredients: list[CompetitorIngredientItem]
+
+    @field_validator('ingredients')
+    @classmethod
+    def validate_ingredients(cls, v):
+        if not v:
+            raise ValueError("配方至少需要一个成分")
+        names = [item.name for item in v]
+        if len(names) != len(set(names)):
+            raise ValueError("成分名称不能重复")
+        return v
+
+
+class CompetitorFormulaUpdateIngredients(BaseModel):
+    ingredients: list[CompetitorIngredientItem]
+
+    @field_validator('ingredients')
+    @classmethod
+    def validate_ingredients(cls, v):
+        if not v:
+            raise ValueError("配方至少需要一个成分")
+        names = [item.name for item in v]
+        if len(names) != len(set(names)):
+            raise ValueError("成分名称不能重复")
+        return v
+
+
+class CompetitorFormulaResponse(BaseModel):
+    id: int
+    competitor_name: str
+    product_name: str
+    ingredients: list[CompetitorIngredientItem]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CompetitorFormulaListItem(BaseModel):
+    id: int
+    competitor_name: str
+    product_name: str
+    ingredient_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EstimatedIngredientItem(BaseModel):
+    rank: int
+    name: str
+    lower_bound: float
+    upper_bound: float
+    median_estimate: float
+    is_banned: bool = False
+
+
+class EstimationResponse(BaseModel):
+    competitor_id: int
+    competitor_name: str
+    product_name: str
+    ingredients: list[EstimatedIngredientItem]
+
+
+class GapAnalysisItem(BaseModel):
+    name: str
+    competitor_lower: float | None = None
+    competitor_upper: float | None = None
+    our_percentage: float | None = None
+    gap_status: str
+    score: float
+
+
+class GapAnalysisResponse(BaseModel):
+    competitor_id: int
+    competitor_name: str
+    product_name: str
+    our_version_id: int
+    our_version_number: int
+    items: list[GapAnalysisItem]
+    total_score: float
+    max_score: float
+    gap_score_percentage: float

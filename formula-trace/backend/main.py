@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import engine, Base
-from routers import product_lines, versions, batches, exclusion_groups, analytics, costs, stability, approvals, inventory, reviews, regulations
+from routers import product_lines, versions, batches, exclusion_groups, analytics, costs, stability, approvals, inventory, reviews, regulations, benchmarking
 
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ app.include_router(approvals.router)
 app.include_router(inventory.router)
 app.include_router(reviews.router)
 app.include_router(regulations.router)
+app.include_router(benchmarking.router)
 
 
 @app.get("/api/health")

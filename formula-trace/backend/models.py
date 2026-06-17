@@ -236,3 +236,17 @@ class Regulation(Base):
     notes: Mapped[str] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)
+
+
+class CompetitorFormula(Base):
+    __tablename__ = "competitor_formulas"
+    __table_args__ = (
+        UniqueConstraint("competitor_name", "product_name", name="unique_competitor_product"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    competitor_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    product_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    ingredients: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)

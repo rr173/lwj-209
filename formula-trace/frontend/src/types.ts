@@ -545,3 +545,68 @@ export interface ImpactAnalysisResponse {
   stability_impact: StabilityImpactAnalysis;
   exclusion_conflicts: ExclusionConflictItem[];
 }
+
+export interface CompetitorIngredientItem {
+  name: string;
+}
+
+export interface CompetitorFormula {
+  id: number;
+  competitor_name: string;
+  product_name: string;
+  ingredients: CompetitorIngredientItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetitorFormulaListItem {
+  id: number;
+  competitor_name: string;
+  product_name: string;
+  ingredient_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetitorFormulaCreate {
+  competitor_name: string;
+  product_name: string;
+  ingredients: CompetitorIngredientItem[];
+}
+
+export interface EstimatedIngredientItem {
+  rank: number;
+  name: string;
+  lower_bound: number;
+  upper_bound: number;
+  median_estimate: number;
+  is_banned: boolean;
+}
+
+export interface EstimationResponse {
+  competitor_id: number;
+  competitor_name: string;
+  product_name: string;
+  ingredients: EstimatedIngredientItem[];
+}
+
+export interface GapAnalysisItem {
+  name: string;
+  competitor_lower: number | null;
+  competitor_upper: number | null;
+  our_percentage: number | null;
+  gap_status: string;
+  score: number;
+}
+
+export interface GapAnalysisResponse {
+  competitor_id: number;
+  competitor_name: string;
+  product_name: string;
+  our_version_id: number;
+  our_version_number: number;
+  items: GapAnalysisItem[];
+  total_score: number;
+  max_score: number;
+  gap_score_percentage: number;
+}
