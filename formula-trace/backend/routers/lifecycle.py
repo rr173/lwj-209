@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, text
 from database import get_db
 from models import (
     FormulaVersion,
@@ -100,21 +100,37 @@ async def get_version_timeline(version_id: int, db: AsyncSession = Depends(get_d
                 "parent_version_number": parent.version_number,
             }
 
-    create_time = version.created_at if hasattr(version, 'created_at') else datetime.now()
-    if not hasattr(version, 'created_at'):
-        events.append(LifecycleEvent(
-            event_type="version_created",
-            event_time=datetime.min,
-            description=f"版本 V{version.version_number} 创建",
-            operator=None,
-        ))
+    version_create_time = None
+    if version.created_at is not None:
+        version_create_time = version.created_at
     else:
-        events.append(LifecycleEvent(
-            event_type="version_created",
-            event_time=version.created_at,
-            description=f"版本 V{version.version_number} 创建",
-            operator=None,
-        ))
+        create_apr_result = await db.execute(
+            select(ApprovalRecord).where(
+                and_(
+                    ApprovalRecord.version_id == version_id,
+                    ApprovalRecord.action == "submit",
+                )
+            ).order_by(ApprovalRecord.created_at.asc())
+        )
+        create_apr_records = create_apr_result.scalars().all()
+        if create_apr_records:
+            version_create_time = create_apr_records[0].created_at
+        else:
+            batch_result_for_time = await db.execute(
+                select(Batch).where(Batch.version_id == version_id).order_by(Batch.production_date.asc())
+            )
+            batches_for_time = batch_result_for_time.scalars().all()
+            if batches_for_time:
+                version_create_time = datetime.combine(batches_for_time[0].production_date, datetime.min.time())
+            else:
+                version_create_time = datetime.now()
+
+    events.append(LifecycleEvent(
+        event_type="version_created",
+        event_time=version_create_time,
+        description=f"版本 V{version.version_number} 创建",
+        operator=None,
+    ))
 
     approval_result = await db.execute(
         select(ApprovalRecord)
@@ -172,7 +188,14 @@ async def get_version_timeline(version_id: int, db: AsyncSession = Depends(get_d
     all_meetings = all_meetings_result.scalars().all()
     referenced_meetings = []
     for meeting in all_meetings:
-        if version_id in (meeting.version_ids or []):
+        version_ids = meeting.version_ids or []
+        if isinstance(version_ids, str):
+            import json
+            try:
+                version_ids = json.loads(version_ids)
+            except:
+                version_ids = []
+        if version_id in version_ids:
             referenced_meetings.append(meeting)
 
     decision_result = await db.execute(
@@ -406,6 +429,12 @@ async def complete_milestone(
     if not milestone:
         raise HTTPException(status_code=404, detail="里程碑不存在")
 
+    if milestone.status == "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="该里程碑已标记完成，不可重复操作",
+        )
+
     milestone.status = "completed"
     milestone.actual_completion_date = data.actual_completion_date or date.today()
     await db.commit()
@@ -459,11 +488,29 @@ async def get_product_line_lifecycle_stats(
         version_batches = batch_result.scalars().all()
         first_batch_date = version_batches[0].production_date if version_batches else None
 
-        if first_batch_date and hasattr(version, 'created_at'):
-            create_date = version.created_at.date() if isinstance(version.created_at, datetime) else version.created_at
-            delta = (first_batch_date - create_date).days
-            if delta >= 0:
-                days_to_first_batch_list.append(float(delta))
+        if first_batch_date:
+            create_date = None
+            if version.created_at is not None:
+                create_date = version.created_at.date() if isinstance(version.created_at, datetime) else version.created_at
+            else:
+                apr_result = await db.execute(
+                    select(ApprovalRecord).where(
+                        and_(
+                            ApprovalRecord.version_id == version.id,
+                            ApprovalRecord.action == "submit",
+                        )
+                    ).order_by(ApprovalRecord.created_at.asc())
+                )
+                apr_records = apr_result.scalars().all()
+                if apr_records:
+                    create_date = apr_records[0].created_at.date()
+                elif version_batches:
+                    create_date = version_batches[0].production_date
+
+            if create_date is not None:
+                delta = (first_batch_date - create_date).days
+                if delta >= 0:
+                    days_to_first_batch_list.append(float(delta))
 
         if first_batch_date:
             approve_result = await db.execute(

@@ -1,7 +1,12 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from sqlalchemy import select
 from database import async_session_maker
-from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote, IngredientTypeConfig, CompatibilityRule, IngredientInventory, InventoryTransaction, Regulation
+from models import (
+    ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote,
+    IngredientTypeConfig, CompatibilityRule, IngredientInventory,
+    InventoryTransaction, Regulation, ApprovalRecord, ReviewMeeting,
+    ReviewScore, ReviewDecision, ComplianceCheckRecord
+)
 
 
 async def seed_database():
@@ -40,7 +45,8 @@ async def seed_database():
             version_number=1,
             parent_id=None,
             ingredients=v1_ingredients,
-            approval_status="published"
+            approval_status="published",
+            created_at=datetime(2025, 5, 1, 10, 0, 0)
         )
         db.add(v1)
         await db.flush()
@@ -63,7 +69,8 @@ async def seed_database():
             version_number=2,
             parent_id=v1.id,
             ingredients=v2_ingredients,
-            approval_status="published"
+            approval_status="published",
+            created_at=datetime(2025, 5, 15, 14, 30, 0)
         )
         db.add(v2)
         await db.flush()
@@ -87,7 +94,8 @@ async def seed_database():
             version_number=3,
             parent_id=v2.id,
             ingredients=v3_ingredients,
-            approval_status="published"
+            approval_status="published",
+            created_at=datetime(2025, 5, 25, 9, 0, 0)
         )
         db.add(v3)
         await db.flush()
@@ -110,7 +118,8 @@ async def seed_database():
             version_number=4,
             parent_id=v1.id,
             ingredients=v4_ingredients,
-            approval_status="pending"
+            approval_status="pending",
+            created_at=datetime(2025, 6, 1, 11, 0, 0)
         )
         db.add(v4)
         await db.flush()
@@ -134,10 +143,28 @@ async def seed_database():
             version_number=5,
             parent_id=v4.id,
             ingredients=v5_ingredients,
-            approval_status="published"
+            approval_status="published",
+            created_at=datetime(2025, 6, 5, 16, 0, 0)
         )
         db.add(v5)
         await db.flush()
+
+        approval_records = [
+            ApprovalRecord(version_id=v1.id, action="submit", operator="配方师-张三", remark="初始配方提交", created_at=datetime(2025, 5, 3, 9, 0, 0)),
+            ApprovalRecord(version_id=v1.id, action="approve", operator="审核员-李四", remark="配方审核通过", created_at=datetime(2025, 5, 5, 14, 0, 0)),
+            ApprovalRecord(version_id=v2.id, action="submit", operator="配方师-张三", remark="增加熊果苷，提升美白效果", created_at=datetime(2025, 5, 18, 10, 0, 0)),
+            ApprovalRecord(version_id=v2.id, action="approve", operator="审核员-李四", remark="审核通过", created_at=datetime(2025, 5, 20, 15, 30, 0)),
+            ApprovalRecord(version_id=v3.id, action="submit", operator="配方师-张三", remark="调整烟酰胺和熊果苷比例，添加泛醇舒缓", created_at=datetime(2025, 5, 28, 9, 30, 0)),
+            ApprovalRecord(version_id=v3.id, action="reject", operator="审核员-李四", remark="成本偏高，建议优化", created_at=datetime(2025, 5, 29, 11, 0, 0)),
+            ApprovalRecord(version_id=v3.id, action="submit", operator="配方师-张三", remark="重新调整比例，成本已优化", created_at=datetime(2025, 5, 30, 16, 0, 0)),
+            ApprovalRecord(version_id=v3.id, action="approve", operator="审核员-李四", remark="审核通过", created_at=datetime(2025, 6, 2, 10, 0, 0)),
+            ApprovalRecord(version_id=v4.id, action="submit", operator="配方师-王五", remark="尝试水杨酸新配方路线", created_at=datetime(2025, 6, 2, 14, 0, 0)),
+            ApprovalRecord(version_id=v4.id, action="reject", operator="审核员-李四", remark="水杨酸与烟酰胺存在互斥风险，需要进一步验证", created_at=datetime(2025, 6, 3, 9, 0, 0)),
+            ApprovalRecord(version_id=v5.id, action="submit", operator="配方师-王五", remark="添加红没药醇缓解刺激，已验证互斥风险可控", created_at=datetime(2025, 6, 8, 10, 0, 0)),
+            ApprovalRecord(version_id=v5.id, action="approve", operator="审核员-李四", remark="审核通过，建议试产验证", created_at=datetime(2025, 6, 10, 14, 0, 0)),
+        ]
+        for ar in approval_records:
+            db.add(ar)
 
         b1 = Batch(
             version_id=v2.id,
@@ -171,6 +198,70 @@ async def seed_database():
             cost_per_kg=115.0
         )
         db.add(b3)
+        await db.flush()
+
+        m1 = ReviewMeeting(
+            title="Q2美白精华配方评审会",
+            review_date=date(2025, 6, 12),
+            status="completed",
+            judges=["张总工", "李总监", "王经理"],
+            version_ids=[v2.id, v3.id],
+            started_at=datetime(2025, 6, 12, 14, 0, 0),
+            ended_at=datetime(2025, 6, 12, 16, 30, 0),
+            created_at=datetime(2025, 6, 10, 10, 0, 0),
+        )
+        db.add(m1)
+        await db.flush()
+
+        m2 = ReviewMeeting(
+            title="水杨酸配方路线专项评审",
+            review_date=date(2025, 6, 18),
+            status="completed",
+            judges=["张总工", "陈博士", "刘安全"],
+            version_ids=[v5.id],
+            started_at=datetime(2025, 6, 18, 10, 0, 0),
+            ended_at=datetime(2025, 6, 18, 12, 0, 0),
+            created_at=datetime(2025, 6, 15, 9, 0, 0),
+        )
+        db.add(m2)
+        await db.flush()
+
+        scores_m1 = [
+            ReviewScore(meeting_id=m1.id, version_id=v2.id, judge_name="张总工", rationality_score=8.0, cost_score=7.5, feasibility_score=8.5, comment="配方合理，美白功效有保障"),
+            ReviewScore(meeting_id=m1.id, version_id=v2.id, judge_name="李总监", rationality_score=7.5, cost_score=8.0, feasibility_score=8.0, comment="成本控制良好"),
+            ReviewScore(meeting_id=m1.id, version_id=v2.id, judge_name="王经理", rationality_score=8.5, cost_score=7.0, feasibility_score=9.0, comment="生产可行性高"),
+            ReviewScore(meeting_id=m1.id, version_id=v3.id, judge_name="张总工", rationality_score=8.5, cost_score=7.0, feasibility_score=8.0, comment="改进思路好，但成本需注意"),
+            ReviewScore(meeting_id=m1.id, version_id=v3.id, judge_name="李总监", rationality_score=8.0, cost_score=6.5, feasibility_score=8.5, comment="泛醇添加是亮点"),
+            ReviewScore(meeting_id=m1.id, version_id=v3.id, judge_name="王经理", rationality_score=9.0, cost_score=7.5, feasibility_score=8.5, comment="整体优于V2"),
+        ]
+        for s in scores_m1:
+            db.add(s)
+
+        scores_m2 = [
+            ReviewScore(meeting_id=m2.id, version_id=v5.id, judge_name="张总工", rationality_score=9.0, cost_score=8.5, feasibility_score=8.0, comment="水杨酸+红没药醇组合很好"),
+            ReviewScore(meeting_id=m2.id, version_id=v5.id, judge_name="陈博士", rationality_score=9.5, cost_score=8.0, feasibility_score=8.5, comment="互斥风险控制到位"),
+            ReviewScore(meeting_id=m2.id, version_id=v5.id, judge_name="刘安全", rationality_score=8.5, cost_score=8.0, feasibility_score=9.0, comment="安全性有保障"),
+        ]
+        for s in scores_m2:
+            db.add(s)
+        await db.flush()
+
+        decisions = [
+            ReviewDecision(meeting_id=m1.id, version_id=v2.id, avg_rationality=8.0, avg_cost=7.5, avg_feasibility=8.5, final_score=8.0, decision="approve", created_at=datetime(2025, 6, 12, 17, 0, 0)),
+            ReviewDecision(meeting_id=m1.id, version_id=v3.id, avg_rationality=8.5, avg_cost=7.0, avg_feasibility=8.3, final_score=8.0, decision="conditional", created_at=datetime(2025, 6, 12, 17, 0, 0)),
+            ReviewDecision(meeting_id=m2.id, version_id=v5.id, avg_rationality=9.0, avg_cost=8.2, avg_feasibility=8.5, final_score=8.6, decision="approve", created_at=datetime(2025, 6, 18, 12, 30, 0)),
+        ]
+        for d in decisions:
+            db.add(d)
+
+        compliance_records = [
+            ComplianceCheckRecord(version_id=v2.id, target_market="中国", product_category="面部", overall_conclusion="compliant", compliance_rate=100.0, created_at=datetime(2025, 5, 22, 10, 0, 0)),
+            ComplianceCheckRecord(version_id=v3.id, target_market="中国", product_category="面部", overall_conclusion="compliant", compliance_rate=100.0, created_at=datetime(2025, 6, 3, 14, 0, 0)),
+            ComplianceCheckRecord(version_id=v3.id, target_market="欧盟", product_category="面部", overall_conclusion="warning", compliance_rate=85.7, created_at=datetime(2025, 6, 5, 9, 0, 0)),
+            ComplianceCheckRecord(version_id=v5.id, target_market="中国", product_category="面部", overall_conclusion="compliant", compliance_rate=100.0, created_at=datetime(2025, 6, 12, 11, 0, 0)),
+        ]
+        for cr in compliance_records:
+            db.add(cr)
 
         today = date.today()
         quotes = [
