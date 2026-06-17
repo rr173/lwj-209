@@ -7,7 +7,8 @@ from models import Regulation, FormulaVersion
 from schemas import (
     RegulationCreate, RegulationUpdate, RegulationResponse,
     RegulationBatchImportResult, ComplianceReportResponse,
-    ComplianceCheckItem, MultiMarketCompareResponse, MultiMarketCompareItem
+    ComplianceCheckItem, MultiMarketCompareResponse, MultiMarketCompareItem,
+    ComplianceCheckRequest, MultiMarketCompareRequest, ExportPdfRequest
 )
 from datetime import datetime
 from io import BytesIO
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/api/regulations", tags=["regulations"])
 
 MARKET_OPTIONS = ["中国", "欧盟", "美国", "日本", "韩国"]
 CATEGORY_OPTIONS = ["眼部", "唇部", "面部", "全身", "防晒", "染发", "烫发"]
+CATEGORY_FALLBACK_ORDER = ["眼部", "唇部", "面部", "防晒", "染发", "烫发", "全身"]
 
 STATUS_COMPLIANT = "合规"
 STATUS_OVER_LIMIT = "超限"
@@ -31,6 +33,11 @@ STATUS_UNLISTED = "未收录"
 @router.get("/markets", response_model=list[str])
 async def get_available_markets():
     return MARKET_OPTIONS
+
+
+@router.get("/categories", response_model=list[str])
+async def get_available_categories():
+    return CATEGORY_OPTIONS
 
 
 @router.get("", response_model=list[RegulationResponse])
@@ -156,24 +163,37 @@ async def batch_import_regulations(
     )
 
 
+def _find_best_regulation(
+    ingredient_name: str,
+    regulations_map: dict[tuple[str, str], Regulation],
+    product_category: str
+) -> Regulation | None:
+    key_specific = (ingredient_name, product_category)
+    if key_specific in regulations_map:
+        return regulations_map[key_specific]
+
+    if product_category != "全身":
+        key_general = (ingredient_name, "全身")
+        if key_general in regulations_map:
+            return regulations_map[key_general]
+
+    for cat in CATEGORY_FALLBACK_ORDER:
+        key = (ingredient_name, cat)
+        if key in regulations_map:
+            return regulations_map[key]
+
+    return None
+
+
 def _check_ingredient_compliance(
     ingredient: dict,
-    regulations_map: dict[tuple[str, str], Regulation]
+    regulations_map: dict[tuple[str, str], Regulation],
+    product_category: str
 ) -> ComplianceCheckItem:
     name = ingredient["name"]
     percentage = ingredient["percentage"]
 
-    key = (name, "全身")
-    reg = regulations_map.get(key)
-
-    if reg is None:
-        category_key = None
-        for cat in CATEGORY_OPTIONS:
-            if (name, cat) in regulations_map:
-                category_key = (name, cat)
-                break
-        if category_key:
-            reg = regulations_map[category_key]
+    reg = _find_best_regulation(name, regulations_map, product_category)
 
     if reg is None:
         return ComplianceCheckItem(
@@ -183,6 +203,7 @@ def _check_ingredient_compliance(
             max_percentage=None,
             is_banned=None,
             product_category=None,
+            matched_regulation_category=None,
             notes="未收录,需人工确认",
             regulation_reference=None
         )
@@ -195,6 +216,7 @@ def _check_ingredient_compliance(
             max_percentage=reg.max_percentage,
             is_banned=True,
             product_category=reg.product_category,
+            matched_regulation_category=reg.product_category,
             notes=reg.notes,
             regulation_reference=reg.regulation_reference
         )
@@ -207,6 +229,7 @@ def _check_ingredient_compliance(
             max_percentage=reg.max_percentage,
             is_banned=False,
             product_category=reg.product_category,
+            matched_regulation_category=reg.product_category,
             notes=reg.notes,
             regulation_reference=reg.regulation_reference
         )
@@ -218,6 +241,7 @@ def _check_ingredient_compliance(
         max_percentage=reg.max_percentage,
         is_banned=False,
         product_category=reg.product_category,
+        matched_regulation_category=reg.product_category,
         notes=reg.notes,
         regulation_reference=reg.regulation_reference
     )
@@ -241,16 +265,15 @@ async def _get_regulations_map(db: AsyncSession, target_market: str) -> dict[tup
 
 @router.post("/check-compliance", response_model=ComplianceReportResponse)
 async def check_compliance(
-    version_id: int = Query(..., description="配方版本ID"),
-    target_market: str = Query(..., description="目标市场"),
+    data: ComplianceCheckRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    version = await _get_version(db, version_id)
-    regulations_map = await _get_regulations_map(db, target_market)
+    version = await _get_version(db, data.version_id)
+    regulations_map = await _get_regulations_map(db, data.target_market)
 
     items = []
     for ing in version.ingredients:
-        item = _check_ingredient_compliance(ing, regulations_map)
+        item = _check_ingredient_compliance(ing, regulations_map, data.product_category)
         items.append(item)
 
     compliant_count = sum(1 for item in items if item.status == STATUS_COMPLIANT)
@@ -270,7 +293,7 @@ async def check_compliance(
     return ComplianceReportResponse(
         version_id=version.id,
         version_number=version.version_number,
-        target_market=target_market,
+        target_market=data.target_market,
         overall_conclusion=overall_conclusion,
         compliance_rate=compliance_rate,
         total_ingredients=total,
@@ -284,17 +307,13 @@ async def check_compliance(
 
 @router.post("/multi-market-compare", response_model=MultiMarketCompareResponse)
 async def multi_market_compare(
-    version_id: int = Query(..., description="配方版本ID"),
-    target_markets: list[str] = Query(..., description="目标市场列表（2-5个）"),
+    data: MultiMarketCompareRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    if len(target_markets) < 2 or len(target_markets) > 5:
-        raise HTTPException(status_code=400, detail="市场数量必须在2-5个之间")
-
-    version = await _get_version(db, version_id)
+    version = await _get_version(db, data.version_id)
 
     regulations_maps = {}
-    for market in target_markets:
+    for market in data.target_markets:
         regulations_maps[market] = await _get_regulations_map(db, market)
 
     items = []
@@ -302,8 +321,8 @@ async def multi_market_compare(
 
     for ing in version.ingredients:
         market_statuses = {}
-        for market in target_markets:
-            item = _check_ingredient_compliance(ing, regulations_maps[market])
+        for market in data.target_markets:
+            item = _check_ingredient_compliance(ing, regulations_maps[market], data.product_category)
             market_statuses[market] = item.status
 
         status_values = list(market_statuses.values())
@@ -322,7 +341,7 @@ async def multi_market_compare(
     return MultiMarketCompareResponse(
         version_id=version.id,
         version_number=version.version_number,
-        target_markets=target_markets,
+        target_markets=data.target_markets,
         items=items,
         inconsistent_ingredients=inconsistent_ingredients
     )
@@ -402,7 +421,7 @@ def _generate_pdf_report(
     story.append(Spacer(1, 0.3 * cm))
 
     table_data = [
-        ["成分名称", "实际含量", "限用上限", "状态", "备注"]
+        ["成分名称", "实际含量", "限用上限", "状态", "匹配品类", "备注"]
     ]
 
     for item in report.items:
@@ -411,16 +430,18 @@ def _generate_pdf_report(
         notes = item.notes or "-"
         if item.status == STATUS_OVER_LIMIT:
             notes = f"实际值 {item.percentage}% vs 限值 {item.max_percentage}%"
+        matched_cat = item.matched_regulation_category or "-"
 
         table_data.append([
             item.ingredient_name,
             f"{item.percentage}%",
             max_pct,
             item.status,
+            matched_cat,
             notes
         ])
 
-    detail_table = Table(table_data, colWidths=[4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 6.5 * cm])
+    detail_table = Table(table_data, colWidths=[3.5 * cm, 2 * cm, 2 * cm, 2 * cm, 2 * cm, 5.5 * cm])
     table_style = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1890ff")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -502,17 +523,26 @@ def _generate_pdf_report(
 
 @router.post("/export-pdf")
 async def export_compliance_pdf(
-    version_id: int = Query(..., description="配方版本ID"),
-    target_markets: list[str] = Query(..., description="目标市场列表"),
+    data: ExportPdfRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    primary_market = target_markets[0]
+    primary_market = data.target_markets[0]
 
-    report = await check_compliance(version_id, primary_market, db)
+    check_req = ComplianceCheckRequest(
+        version_id=data.version_id,
+        target_market=primary_market,
+        product_category=data.product_category
+    )
+    report = await check_compliance(check_req, db)
 
     compare_data = None
-    if len(target_markets) >= 2:
-        compare_data = await multi_market_compare(version_id, target_markets, db)
+    if len(data.target_markets) >= 2:
+        compare_req = MultiMarketCompareRequest(
+            version_id=data.version_id,
+            target_markets=data.target_markets,
+            product_category=data.product_category
+        )
+        compare_data = await multi_market_compare(compare_req, db)
 
     pdf_buffer = _generate_pdf_report(report, compare_data)
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')

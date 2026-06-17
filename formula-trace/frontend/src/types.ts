@@ -438,6 +438,7 @@ export interface ComplianceCheckItem {
   max_percentage: number | null;
   is_banned: boolean | null;
   product_category: string | null;
+  matched_regulation_category: string | null;
   notes: string | null;
   regulation_reference: string | null;
 }

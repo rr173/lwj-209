@@ -72,6 +72,8 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
 
   const [availableMarkets, setAvailableMarkets] = useState<string[]>([]);
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>(['中国']);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('面部');
   const [complianceReport, setComplianceReport] = useState<ComplianceReportResponse | null>(null);
   const [compareReport, setCompareReport] = useState<MultiMarketCompareResponse | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(false);
@@ -121,6 +123,13 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       })
       .catch(() => {
         if (!cancelled) setAvailableMarkets([]);
+      });
+    api.getAvailableCategories()
+      .then(data => {
+        if (!cancelled) setAvailableCategories(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableCategories([]);
       });
     return () => { cancelled = true; };
   }, []);
@@ -1657,12 +1666,12 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
 
     try {
       if (selectedMarkets.length === 1) {
-        const data = await api.checkCompliance(version.id, selectedMarkets[0]);
+        const data = await api.checkCompliance(version.id, selectedMarkets[0], selectedCategory);
         setComplianceReport(data);
       } else {
-        const data = await api.multiMarketCompare(version.id, selectedMarkets);
+        const data = await api.multiMarketCompare(version.id, selectedMarkets, selectedCategory);
         setCompareReport(data);
-        const primaryData = await api.checkCompliance(version.id, selectedMarkets[0]);
+        const primaryData = await api.checkCompliance(version.id, selectedMarkets[0], selectedCategory);
         setComplianceReport(primaryData);
       }
       message.success('合规检测完成');
@@ -1672,7 +1681,7 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     } finally {
       setComplianceLoading(false);
     }
-  }, [version.id, selectedMarkets]);
+  }, [version.id, selectedMarkets, selectedCategory]);
 
   const handleExportPdf = useCallback(async () => {
     if (selectedMarkets.length === 0) {
@@ -1685,7 +1694,7 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     }
 
     try {
-      const blob = await api.exportCompliancePdf(version.id, selectedMarkets);
+      const blob = await api.exportCompliancePdf(version.id, selectedMarkets, selectedCategory);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1699,7 +1708,7 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     } catch (e: any) {
       message.error('PDF导出失败');
     }
-  }, [version.id, version.version_number, selectedMarkets, hasRunComplianceCheck]);
+  }, [version.id, version.version_number, selectedMarkets, selectedCategory, hasRunComplianceCheck]);
 
   const renderComplianceTab = () => (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
@@ -1713,19 +1722,33 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
         }
       >
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>选择目标市场：</Text>
-            <Checkbox.Group
-              value={selectedMarkets}
-              onChange={(values) => setSelectedMarkets(values as string[])}
-              style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}
-            >
-              {availableMarkets.map(market => (
-                <Checkbox key={market} value={market} style={{ marginRight: 0 }}>
-                  {market}
-                </Checkbox>
-              ))}
-            </Checkbox.Group>
+          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <div>
+              <Text strong style={{ marginBottom: 8, display: 'block' }}>选择目标市场：</Text>
+              <Checkbox.Group
+                value={selectedMarkets}
+                onChange={(values) => setSelectedMarkets(values as string[])}
+                style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}
+              >
+                {availableMarkets.map(market => (
+                  <Checkbox key={market} value={market} style={{ marginRight: 0 }}>
+                    {market}
+                  </Checkbox>
+                ))}
+              </Checkbox.Group>
+            </div>
+            <div>
+              <Text strong style={{ marginBottom: 8, display: 'block' }}>产品品类：</Text>
+              <Select
+                value={selectedCategory}
+                onChange={setSelectedCategory}
+                style={{ minWidth: 160 }}
+                options={availableCategories.map(c => ({ label: c, value: c }))}
+              />
+              <div style={{ marginTop: 4 }}>
+                <Text type="secondary" style={{ fontSize: 11 }}>检测时优先匹配该品类法规，无匹配则回退到"全身"</Text>
+              </div>
+            </div>
           </div>
 
           <Space>
@@ -1858,8 +1881,17 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
                     title: '适用品类',
                     dataIndex: 'product_category',
                     key: 'product_category',
-                    width: 100,
+                    width: 90,
                     render: (v: string | null) => v || <Text type="secondary">-</Text>
+                  },
+                  {
+                    title: '匹配品类',
+                    dataIndex: 'matched_regulation_category',
+                    key: 'matched_regulation_category',
+                    width: 90,
+                    render: (v: string | null) => v ? (
+                      <Tag color={v === selectedCategory ? 'blue' : 'default'}>{v}</Tag>
+                    ) : <Text type="secondary">-</Text>
                   },
                   {
                     title: '状态',

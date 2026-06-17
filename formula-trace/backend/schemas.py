@@ -609,8 +609,27 @@ class ComplianceCheckItem(BaseModel):
     max_percentage: Optional[float]
     is_banned: Optional[bool]
     product_category: Optional[str]
+    matched_regulation_category: Optional[str] = None
     notes: Optional[str]
     regulation_reference: Optional[str]
+
+
+class ComplianceCheckRequest(BaseModel):
+    version_id: int
+    target_market: str
+    product_category: str = Field("全身", min_length=1, max_length=100)
+
+
+class MultiMarketCompareRequest(BaseModel):
+    version_id: int
+    target_markets: list[str] = Field(..., min_length=2, max_length=5)
+    product_category: str = Field("全身", min_length=1, max_length=100)
+
+
+class ExportPdfRequest(BaseModel):
+    version_id: int
+    target_markets: list[str] = Field(..., min_length=1, max_length=5)
+    product_category: str = Field("全身", min_length=1, max_length=100)
 
 
 class ComplianceReportResponse(BaseModel):

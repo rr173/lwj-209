@@ -173,6 +173,9 @@ export const api = {
   getAvailableMarkets: (): Promise<string[]> =>
     axios.get(`${API_BASE}/regulations/markets`).then(r => r.data),
 
+  getAvailableCategories: (): Promise<string[]> =>
+    axios.get(`${API_BASE}/regulations/categories`).then(r => r.data),
+
   listRegulations: (targetMarket?: string, ingredientName?: string, productCategory?: string): Promise<Regulation[]> =>
     axios.get(`${API_BASE}/regulations`, {
       params: { target_market: targetMarket, ingredient_name: ingredientName, product_category: productCategory }
@@ -184,21 +187,26 @@ export const api = {
   batchImportRegulations: (items: RegulationCreate[]): Promise<RegulationBatchImportResult> =>
     axios.post(`${API_BASE}/regulations/batch-import`, items).then(r => r.data),
 
-  checkCompliance: (versionId: number, targetMarket: string): Promise<ComplianceReportResponse> =>
-    axios.post(`${API_BASE}/regulations/check-compliance`, null, {
-      params: { version_id: versionId, target_market: targetMarket }
+  checkCompliance: (versionId: number, targetMarket: string, productCategory: string = '全身'): Promise<ComplianceReportResponse> =>
+    axios.post(`${API_BASE}/regulations/check-compliance`, {
+      version_id: versionId,
+      target_market: targetMarket,
+      product_category: productCategory
     }).then(r => r.data),
 
-  multiMarketCompare: (versionId: number, targetMarkets: string[]): Promise<MultiMarketCompareResponse> =>
-    axios.post(`${API_BASE}/regulations/multi-market-compare`, null, {
-      params: { version_id: versionId, target_markets: targetMarkets }
+  multiMarketCompare: (versionId: number, targetMarkets: string[], productCategory: string = '全身'): Promise<MultiMarketCompareResponse> =>
+    axios.post(`${API_BASE}/regulations/multi-market-compare`, {
+      version_id: versionId,
+      target_markets: targetMarkets,
+      product_category: productCategory
     }).then(r => r.data),
 
-  exportCompliancePdf: (versionId: number, targetMarkets: string[]): Promise<Blob> =>
-    axios.post(`${API_BASE}/regulations/export-pdf`, null, {
-      params: { version_id: versionId, target_markets: targetMarkets },
-      responseType: 'blob'
-    }).then(r => r.data),
+  exportCompliancePdf: (versionId: number, targetMarkets: string[], productCategory: string = '全身'): Promise<Blob> =>
+    axios.post(`${API_BASE}/regulations/export-pdf`, {
+      version_id: versionId,
+      target_markets: targetMarkets,
+      product_category: productCategory
+    }, { responseType: 'blob' }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {
