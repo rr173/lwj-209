@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from sqlalchemy import select
 from database import async_session_maker
-from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote, IngredientTypeConfig, CompatibilityRule, IngredientInventory, InventoryTransaction
+from models import ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote, IngredientTypeConfig, CompatibilityRule, IngredientInventory, InventoryTransaction, Regulation
 
 
 async def seed_database():
@@ -328,5 +328,56 @@ async def seed_database():
                     remark="初始库存",
                 )
                 db.add(tx)
+
+        reg_check = await db.execute(
+            select(Regulation).where(Regulation.ingredient_name == "烟酰胺")
+        )
+        if not reg_check.scalar_one_or_none():
+            seed_regulations = [
+                {"market": "中国", "ingredient": "烟酰胺", "max_pct": 4.0, "banned": False, "category": "面部",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "面部产品最大用量4%"},
+                {"market": "中国", "ingredient": "水杨酸", "max_pct": 2.0, "banned": False, "category": "全身",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "最大用量2%"},
+                {"market": "中国", "ingredient": "熊果苷", "max_pct": 7.0, "banned": False, "category": "面部",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "最大用量7%"},
+                {"market": "中国", "ingredient": "维生素C糖苷", "max_pct": 3.0, "banned": False, "category": "面部",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "最大用量3%"},
+                {"market": "中国", "ingredient": "防腐剂", "max_pct": 1.0, "banned": False, "category": "全身",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "总防腐剂最大用量1%"},
+                {"market": "中国", "ingredient": "香精", "max_pct": 1.0, "banned": False, "category": "全身",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "最大用量1%"},
+                {"market": "中国", "ingredient": "三乙醇胺", "max_pct": 2.5, "banned": False, "category": "全身",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "最大用量2.5%"},
+                {"market": "中国", "ingredient": "红没药醇", "max_pct": 1.0, "banned": False, "category": "全身",
+                 "ref": "GB 7916-1987 化妆品卫生标准", "notes": "最大用量1%"},
+                {"market": "欧盟", "ingredient": "烟酰胺", "max_pct": 5.0, "banned": False, "category": "面部",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009", "notes": "面部产品最大用量5%"},
+                {"market": "欧盟", "ingredient": "水杨酸", "max_pct": 1.5, "banned": False, "category": "全身",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009", "notes": "最大用量1.5%"},
+                {"market": "欧盟", "ingredient": "熊果苷", "max_pct": 2.0, "banned": False, "category": "面部",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009", "notes": "最大用量2%"},
+                {"market": "欧盟", "ingredient": "对苯二酚", "max_pct": None, "banned": True, "category": "全身",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009 Annex II", "notes": "禁用成分，禁止添加"},
+                {"market": "欧盟", "ingredient": "铅", "max_pct": None, "banned": True, "category": "全身",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009 Annex II", "notes": "禁用成分，禁止添加"},
+                {"market": "欧盟", "ingredient": "卡波姆", "max_pct": 5.0, "banned": False, "category": "全身",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009", "notes": "最大用量5%"},
+                {"market": "欧盟", "ingredient": "泛醇", "max_pct": 5.0, "banned": False, "category": "全身",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009", "notes": "最大用量5%"},
+                {"market": "欧盟", "ingredient": "甘草酸二钾", "max_pct": 2.0, "banned": False, "category": "全身",
+                 "ref": "EU Cosmetics Regulation (EC) No 1223/2009", "notes": "最大用量2%"},
+            ]
+
+            for reg in seed_regulations:
+                regulation = Regulation(
+                    target_market=reg["market"],
+                    ingredient_name=reg["ingredient"],
+                    max_percentage=reg["max_pct"],
+                    is_banned=reg["banned"],
+                    product_category=reg["category"],
+                    regulation_reference=reg["ref"],
+                    notes=reg["notes"]
+                )
+                db.add(regulation)
 
         await db.commit()

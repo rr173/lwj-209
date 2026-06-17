@@ -556,3 +556,87 @@ class VersionReviewRecord(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RegulationBase(BaseModel):
+    target_market: str = Field(..., min_length=1, max_length=50)
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+    max_percentage: Optional[float] = Field(None, ge=0, le=100)
+    is_banned: bool = False
+    product_category: str = Field("全身", min_length=1, max_length=100)
+    regulation_reference: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
+class RegulationCreate(RegulationBase):
+    @field_validator('max_percentage')
+    @classmethod
+    def check_max_percentage(cls, v, values):
+        if values.data.get('is_banned') and v is not None:
+            raise ValueError('禁用成分不需要设置限用上限')
+        if not values.data.get('is_banned') and v is None:
+            raise ValueError('非禁用成分必须设置限用上限')
+        return v
+
+
+class RegulationUpdate(BaseModel):
+    max_percentage: Optional[float] = Field(None, ge=0, le=100)
+    is_banned: Optional[bool] = None
+    product_category: Optional[str] = Field(None, min_length=1, max_length=100)
+    regulation_reference: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
+class RegulationResponse(RegulationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RegulationBatchImportResult(BaseModel):
+    success_count: int
+    skipped_count: int
+    total_count: int
+
+
+class ComplianceCheckItem(BaseModel):
+    ingredient_name: str
+    percentage: float
+    status: str
+    max_percentage: Optional[float]
+    is_banned: Optional[bool]
+    product_category: Optional[str]
+    notes: Optional[str]
+    regulation_reference: Optional[str]
+
+
+class ComplianceReportResponse(BaseModel):
+    version_id: int
+    version_number: int
+    target_market: str
+    overall_conclusion: str
+    compliance_rate: float
+    total_ingredients: int
+    compliant_count: int
+    over_limit_count: int
+    banned_count: int
+    unlisted_count: int
+    items: list[ComplianceCheckItem]
+
+
+class MultiMarketCompareItem(BaseModel):
+    ingredient_name: str
+    percentage: float
+    market_statuses: dict[str, str]
+    has_inconsistency: bool
+
+
+class MultiMarketCompareResponse(BaseModel):
+    version_id: int
+    version_number: int
+    target_markets: list[str]
+    items: list[MultiMarketCompareItem]
+    inconsistent_ingredients: list[str]

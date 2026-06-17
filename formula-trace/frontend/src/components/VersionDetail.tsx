@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline, Checkbox } from 'antd';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord } from '../types';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse } from '../types';
 import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor } from '../api';
 
 const { Title, Text } = Typography;
@@ -70,6 +70,13 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [reviewRecords, setReviewRecords] = useState<VersionReviewRecord[]>([]);
   const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
 
+  const [availableMarkets, setAvailableMarkets] = useState<string[]>([]);
+  const [selectedMarkets, setSelectedMarkets] = useState<string[]>(['中国']);
+  const [complianceReport, setComplianceReport] = useState<ComplianceReportResponse | null>(null);
+  const [compareReport, setCompareReport] = useState<MultiMarketCompareResponse | null>(null);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const [hasRunComplianceCheck, setHasRunComplianceCheck] = useState(false);
+
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
   const isPublished = version.approval_status === 'published';
@@ -105,6 +112,18 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       });
     return () => { cancelled = true; };
   }, [version.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getAvailableMarkets()
+      .then(data => {
+        if (!cancelled) setAvailableMarkets(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableMarkets([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleApprovalAction = useCallback(async (action: 'submit' | 'approve', operator: string, remark?: string) => {
     setApprovalActionLoading(true);
@@ -1596,6 +1615,412 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     </Space>
   );
 
+  const getComplianceStatusColor = (status: string): string => {
+    switch (status) {
+      case '合规': return '#52c41a';
+      case '超限': return '#f5222d';
+      case '禁用': return '#a8071a';
+      case '未收录': return '#faad14';
+      default: return '#8c8c8c';
+    }
+  };
+
+  const getComplianceStatusTagColor = (status: string): string => {
+    switch (status) {
+      case '合规': return 'success';
+      case '超限': return 'error';
+      case '禁用': return 'error';
+      case '未收录': return 'warning';
+      default: return 'default';
+    }
+  };
+
+  const getOverallConclusionColor = (conclusion: string): string => {
+    switch (conclusion) {
+      case '全部合规': return '#52c41a';
+      case '存在超限': return '#f5222d';
+      case '存在禁用成分': return '#a8071a';
+      default: return '#8c8c8c';
+    }
+  };
+
+  const handleComplianceCheck = useCallback(async () => {
+    if (selectedMarkets.length === 0) {
+      message.warning('请至少选择一个目标市场');
+      return;
+    }
+
+    setComplianceLoading(true);
+    setHasRunComplianceCheck(true);
+    setComplianceReport(null);
+    setCompareReport(null);
+
+    try {
+      if (selectedMarkets.length === 1) {
+        const data = await api.checkCompliance(version.id, selectedMarkets[0]);
+        setComplianceReport(data);
+      } else {
+        const data = await api.multiMarketCompare(version.id, selectedMarkets);
+        setCompareReport(data);
+        const primaryData = await api.checkCompliance(version.id, selectedMarkets[0]);
+        setComplianceReport(primaryData);
+      }
+      message.success('合规检测完成');
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.detail || '合规检测失败';
+      message.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    } finally {
+      setComplianceLoading(false);
+    }
+  }, [version.id, selectedMarkets]);
+
+  const handleExportPdf = useCallback(async () => {
+    if (selectedMarkets.length === 0) {
+      message.warning('请先选择市场并进行检测');
+      return;
+    }
+    if (!hasRunComplianceCheck) {
+      message.warning('请先进行合规检测');
+      return;
+    }
+
+    try {
+      const blob = await api.exportCompliancePdf(version.id, selectedMarkets);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      link.download = `合规报告_V${version.version_number}_${timestamp}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      message.success('PDF导出成功');
+    } catch (e: any) {
+      message.error('PDF导出失败');
+    }
+  }, [version.id, version.version_number, selectedMarkets, hasRunComplianceCheck]);
+
+  const renderComplianceTab = () => (
+    <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Card
+        size="small"
+        title={
+          <Space>
+            <GlobalOutlined style={{ color: '#722ed1' }} />
+            <span>法规合规检测</span>
+          </Space>
+        }
+      >
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <div>
+            <Text strong style={{ marginBottom: 8, display: 'block' }}>选择目标市场：</Text>
+            <Checkbox.Group
+              value={selectedMarkets}
+              onChange={(values) => setSelectedMarkets(values as string[])}
+              style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}
+            >
+              {availableMarkets.map(market => (
+                <Checkbox key={market} value={market} style={{ marginRight: 0 }}>
+                  {market}
+                </Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+
+          <Space>
+            <Button
+              type="primary"
+              icon={<SafetyOutlined />}
+              onClick={handleComplianceCheck}
+              loading={complianceLoading}
+              disabled={selectedMarkets.length === 0}
+            >
+              开始检测
+            </Button>
+            {hasRunComplianceCheck && (
+              <Button
+                icon={<FilePdfOutlined />}
+                onClick={handleExportPdf}
+                disabled={complianceLoading}
+              >
+                导出报告(PDF)
+              </Button>
+            )}
+            <Text type="secondary" style={{ marginLeft: 16 }}>
+              选择2-5个市场可进行多市场对比
+            </Text>
+          </Space>
+        </Space>
+      </Card>
+
+      {complianceReport && selectedMarkets.length === 1 && (
+        <Card
+          size="small"
+          title={
+            <Space>
+              <SafetyOutlined style={{ color: getOverallConclusionColor(complianceReport.overall_conclusion) }} />
+              <span>合规检测报告 - {complianceReport.target_market}</span>
+            </Space>
+          }
+          loading={complianceLoading}
+        >
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Row gutter={24}>
+              <Col span={8}>
+                <Card size="small" style={{ textAlign: 'center', background: '#f9f0ff' }}>
+                  <div style={{ fontSize: 48, fontWeight: 700, color: getOverallConclusionColor(complianceReport.overall_conclusion) }}>
+                    {complianceReport.compliance_rate}%
+                  </div>
+                  <div style={{ color: '#666', fontSize: 14, marginTop: 8 }}>合规率</div>
+                </Card>
+              </Col>
+              <Col span={16}>
+                <Card size="small">
+                  <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <Text strong style={{ fontSize: 16 }}>整体结论：</Text>
+                      <Tag
+                        color={complianceReport.overall_conclusion === '全部合规' ? 'success' : 'error'}
+                        style={{ fontSize: 16, padding: '4px 16px' }}
+                      >
+                        {complianceReport.overall_conclusion}
+                      </Tag>
+                    </div>
+                    <Row gutter={16}>
+                      <Col span={6}>
+                        <Statistic title="总成分数" value={complianceReport.total_ingredients} />
+                      </Col>
+                      <Col span={6}>
+                        <Statistic title="合规成分" value={complianceReport.compliant_count} valueStyle={{ color: '#52c41a' }} />
+                      </Col>
+                      <Col span={6}>
+                        <Statistic title="超限成分" value={complianceReport.over_limit_count} valueStyle={{ color: '#f5222d' }} />
+                      </Col>
+                      <Col span={6}>
+                        <Statistic title="未收录成分" value={complianceReport.unlisted_count} valueStyle={{ color: '#faad14' }} />
+                      </Col>
+                    </Row>
+                    {complianceReport.banned_count > 0 && (
+                      <Alert
+                        type="error"
+                        showIcon
+                        message={`检测到 ${complianceReport.banned_count} 个禁用成分，请立即移除！`}
+                      />
+                    )}
+                  </Space>
+                </Card>
+              </Col>
+            </Row>
+
+            <div>
+              <Text strong style={{ marginBottom: 12, display: 'block' }}>成分检测详情：</Text>
+              <Table
+                size="small"
+                dataSource={complianceReport.items.map((item, idx) => ({ key: idx, ...item }))}
+                pagination={{ pageSize: 10 }}
+                columns={[
+                  {
+                    title: '成分名称',
+                    dataIndex: 'ingredient_name',
+                    key: 'ingredient_name',
+                    width: 160,
+                    render: (v: string, record: any) => (
+                      <Space direction="vertical" size={0}>
+                        <span style={{ fontWeight: 600 }}>{v}</span>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          含量: {record.percentage.toFixed(2)}%
+                        </Text>
+                      </Space>
+                    )
+                  },
+                  {
+                    title: '实际含量',
+                    dataIndex: 'percentage',
+                    key: 'percentage',
+                    width: 100,
+                    align: 'right',
+                    render: (v: number) => (
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                    )
+                  },
+                  {
+                    title: '限用上限',
+                    dataIndex: 'max_percentage',
+                    key: 'max_percentage',
+                    width: 100,
+                    align: 'right',
+                    render: (v: number | null) => v !== null ? (
+                      <span style={{ fontFamily: 'monospace' }}>{v.toFixed(2)}%</span>
+                    ) : <Text type="secondary">-</Text>
+                  },
+                  {
+                    title: '适用品类',
+                    dataIndex: 'product_category',
+                    key: 'product_category',
+                    width: 100,
+                    render: (v: string | null) => v || <Text type="secondary">-</Text>
+                  },
+                  {
+                    title: '状态',
+                    dataIndex: 'status',
+                    key: 'status',
+                    width: 100,
+                    render: (v: string) => (
+                      <Tag color={getComplianceStatusTagColor(v)} style={{ fontSize: 13, padding: '2px 10px' }}>
+                        {v}
+                      </Tag>
+                    )
+                  },
+                  {
+                    title: '备注',
+                    dataIndex: 'notes',
+                    key: 'notes',
+                    render: (v: string | null, record: any) => {
+                      if (record.status === '超限' && record.max_percentage !== null) {
+                        return (
+                          <Text type="danger" strong>
+                            实际值 {record.percentage.toFixed(2)}% vs 限值 {record.max_percentage.toFixed(2)}%
+                          </Text>
+                        );
+                      }
+                      if (record.status === '禁用') {
+                        return <Text type="danger" strong>该成分在目标市场完全禁用</Text>;
+                      }
+                      if (record.status === '未收录') {
+                        return <Text type="warning">法规库未收录，需人工确认</Text>;
+                      }
+                      return v || <Text type="secondary">-</Text>;
+                    }
+                  }
+                ]}
+                rowClassName={(record) => {
+                  if (record.status === '超限' || record.status === '禁用') {
+                    return 'compliance-row-danger';
+                  }
+                  if (record.status === '未收录') {
+                    return 'compliance-row-warning';
+                  }
+                  return '';
+                }}
+              />
+            </div>
+          </Space>
+        </Card>
+      )}
+
+      {compareReport && selectedMarkets.length >= 2 && (
+        <Card
+          size="small"
+          title={
+            <Space>
+              <GlobalOutlined style={{ color: '#722ed1' }} />
+              <span>多市场对比矩阵</span>
+              {compareReport.inconsistent_ingredients.length > 0 && (
+                <Tag color="warning" style={{ marginLeft: 8 }}>
+                  发现 {compareReport.inconsistent_ingredients.length} 个不一致成分
+                </Tag>
+              )}
+            </Space>
+          }
+          loading={complianceLoading}
+        >
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            {compareReport.inconsistent_ingredients.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message={
+                  <span>
+                    以下成分在不同市场法规要求不一致，请特别关注：
+                    <Text strong style={{ marginLeft: 8, color: '#d48806' }}>
+                      {compareReport.inconsistent_ingredients.join('、')}
+                    </Text>
+                  </span>
+                }
+              />
+            )}
+
+            <Table
+              size="small"
+              dataSource={compareReport.items.map((item, idx) => ({ key: idx, ...item }))}
+              pagination={{ pageSize: 20 }}
+              columns={[
+                {
+                  title: '成分名称',
+                  dataIndex: 'ingredient_name',
+                  key: 'ingredient_name',
+                  width: 160,
+                  fixed: 'left',
+                  render: (v: string, record: any) => (
+                    <Space direction="vertical" size={0}>
+                      <span style={{ fontWeight: 600 }}>{v}</span>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        含量: {record.percentage.toFixed(2)}%
+                      </Text>
+                    </Space>
+                  )
+                },
+                {
+                  title: '实际含量',
+                  dataIndex: 'percentage',
+                  key: 'percentage',
+                  width: 100,
+                  fixed: 'left',
+                  align: 'right',
+                  render: (v: number) => (
+                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                  )
+                },
+                ...selectedMarkets.map(market => ({
+                  title: market,
+                  dataIndex: ['market_statuses', market] as const,
+                  key: market,
+                  width: 100,
+                  align: 'center' as const,
+                  render: (v: string) => (
+                    <Tag
+                      color={getComplianceStatusTagColor(v)}
+                      style={{ fontSize: 12, padding: '2px 8px' }}
+                    >
+                      {v}
+                    </Tag>
+                  )
+                }))
+              ]}
+              scroll={{ x: 700 }}
+              rowClassName={(record) => {
+                if (record.has_inconsistency) {
+                  return 'compliance-row-inconsistent';
+                }
+                return '';
+              }}
+            />
+          </Space>
+        </Card>
+      )}
+
+      {hasRunComplianceCheck && !complianceReport && !compareReport && (
+        <Card size="small" loading={complianceLoading}>
+          <Empty description="暂无检测结果" />
+        </Card>
+      )}
+
+      {!hasRunComplianceCheck && (
+        <Card size="small">
+          <Empty
+            description={
+              <Space direction="vertical" size={8} style={{ width: '100%', textAlign: 'center' }}>
+                <SafetyOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
+                <Text type="secondary">请选择目标市场并点击"开始检测"按钮</Text>
+              </Space>
+            }
+          />
+        </Card>
+      )}
+    </Space>
+  );
+
   const renderApprovalTab = () => (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <Card size="small" title={<Space><AuditOutlined /> 审批状态</Space>}>
@@ -1937,6 +2362,11 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'approval',
               label: <span><AuditOutlined /> 审批</span>,
               children: renderApprovalTab()
+            },
+            {
+              key: 'compliance',
+              label: <span><GlobalOutlined /> 法规合规</span>,
+              children: renderComplianceTab()
             }
           ]}
         />

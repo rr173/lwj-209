@@ -115,3 +115,27 @@ body {
   border-radius: 50%;
   display: inline-block;
 }
+
+.compliance-row-danger {
+  background-color: #fff1f0 !important;
+}
+
+.compliance-row-danger:hover > td {
+  background-color: #fff1f0 !important;
+}
+
+.compliance-row-warning {
+  background-color: #fffbe6 !important;
+}
+
+.compliance-row-warning:hover > td {
+  background-color: #fffbe6 !important;
+}
+
+.compliance-row-inconsistent {
+  background-color: #fffbe6 !important;
+}
+
+.compliance-row-inconsistent:hover > td {
+  background-color: #fffbe6 !important;
+}

@@ -218,3 +218,21 @@ class ReviewDecision(Base):
 
     meeting = relationship("ReviewMeeting", back_populates="decisions")
     version = relationship("FormulaVersion")
+
+
+class Regulation(Base):
+    __tablename__ = "regulations"
+    __table_args__ = (
+        UniqueConstraint("target_market", "ingredient_name", "product_category", name="unique_regulation_per_market_ingredient_category"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    target_market: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    max_percentage: Mapped[float] = mapped_column(Float, nullable=True)
+    is_banned: Mapped[bool] = mapped_column(default=False, nullable=False)
+    product_category: Mapped[str] = mapped_column(String(100), nullable=False, default="全身")
+    regulation_reference: Mapped[str] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)

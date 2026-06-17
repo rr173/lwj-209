@@ -32,6 +32,11 @@ import type {
   ReviewScoreSubmit,
   ReviewScore,
   VersionReviewRecord,
+  ComplianceReportResponse,
+  MultiMarketCompareResponse,
+  Regulation,
+  RegulationCreate,
+  RegulationBatchImportResult,
 } from './types';
 
 const API_BASE = '/api';
@@ -164,6 +169,36 @@ export const api = {
 
   getVersionReviews: (versionId: number): Promise<VersionReviewRecord[]> =>
     axios.get(`${API_BASE}/reviews/version/${versionId}`).then(r => r.data),
+
+  getAvailableMarkets: (): Promise<string[]> =>
+    axios.get(`${API_BASE}/regulations/markets`).then(r => r.data),
+
+  listRegulations: (targetMarket?: string, ingredientName?: string, productCategory?: string): Promise<Regulation[]> =>
+    axios.get(`${API_BASE}/regulations`, {
+      params: { target_market: targetMarket, ingredient_name: ingredientName, product_category: productCategory }
+    }).then(r => r.data),
+
+  createRegulation: (data: RegulationCreate): Promise<Regulation> =>
+    axios.post(`${API_BASE}/regulations`, data).then(r => r.data),
+
+  batchImportRegulations: (items: RegulationCreate[]): Promise<RegulationBatchImportResult> =>
+    axios.post(`${API_BASE}/regulations/batch-import`, items).then(r => r.data),
+
+  checkCompliance: (versionId: number, targetMarket: string): Promise<ComplianceReportResponse> =>
+    axios.post(`${API_BASE}/regulations/check-compliance`, null, {
+      params: { version_id: versionId, target_market: targetMarket }
+    }).then(r => r.data),
+
+  multiMarketCompare: (versionId: number, targetMarkets: string[]): Promise<MultiMarketCompareResponse> =>
+    axios.post(`${API_BASE}/regulations/multi-market-compare`, null, {
+      params: { version_id: versionId, target_markets: targetMarkets }
+    }).then(r => r.data),
+
+  exportCompliancePdf: (versionId: number, targetMarkets: string[]): Promise<Blob> =>
+    axios.post(`${API_BASE}/regulations/export-pdf`, null, {
+      params: { version_id: versionId, target_markets: targetMarkets },
+      responseType: 'blob'
+    }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

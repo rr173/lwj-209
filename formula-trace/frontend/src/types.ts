@@ -401,3 +401,72 @@ export interface VersionReviewRecord {
   decision: string | null;
   judge_scores: ReviewScore[];
 }
+
+export interface Regulation {
+  id: number;
+  target_market: string;
+  ingredient_name: string;
+  max_percentage: number | null;
+  is_banned: boolean;
+  product_category: string;
+  regulation_reference: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RegulationCreate {
+  target_market: string;
+  ingredient_name: string;
+  max_percentage?: number | null;
+  is_banned?: boolean;
+  product_category?: string;
+  regulation_reference?: string | null;
+  notes?: string | null;
+}
+
+export interface RegulationBatchImportResult {
+  success_count: number;
+  skipped_count: number;
+  total_count: number;
+}
+
+export interface ComplianceCheckItem {
+  ingredient_name: string;
+  percentage: number;
+  status: '合规' | '超限' | '禁用' | '未收录';
+  max_percentage: number | null;
+  is_banned: boolean | null;
+  product_category: string | null;
+  notes: string | null;
+  regulation_reference: string | null;
+}
+
+export interface ComplianceReportResponse {
+  version_id: number;
+  version_number: number;
+  target_market: string;
+  overall_conclusion: '全部合规' | '存在超限' | '存在禁用成分';
+  compliance_rate: number;
+  total_ingredients: number;
+  compliant_count: number;
+  over_limit_count: number;
+  banned_count: number;
+  unlisted_count: number;
+  items: ComplianceCheckItem[];
+}
+
+export interface MultiMarketCompareItem {
+  ingredient_name: string;
+  percentage: number;
+  market_statuses: Record<string, '合规' | '超限' | '禁用' | '未收录'>;
+  has_inconsistency: boolean;
+}
+
+export interface MultiMarketCompareResponse {
+  version_id: number;
+  version_number: number;
+  target_markets: string[];
+  items: MultiMarketCompareItem[];
+  inconsistent_ingredients: string[];
+}
