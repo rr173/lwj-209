@@ -471,3 +471,77 @@ export interface MultiMarketCompareResponse {
   items: MultiMarketCompareItem[];
   inconsistent_ingredients: string[];
 }
+
+export interface CostImpactDetail {
+  ingredient_name: string;
+  original_percentage: number;
+  new_percentage: number;
+  original_cost: number | null;
+  new_cost: number | null;
+  cost_delta: number | null;
+  unit_price: number | null;
+  supplier_name: string | null;
+}
+
+export interface CostImpactAnalysis {
+  original_total_cost: number;
+  new_total_cost: number;
+  total_delta: number;
+  delta_percentage: number;
+  details: CostImpactDetail[];
+  missing_quotes: string[];
+}
+
+export interface ComplianceRiskItem {
+  ingredient_name: string;
+  target_market: string;
+  percentage: number;
+  status: '合规' | '超限' | '禁用' | '未收录';
+  max_percentage: number | null;
+  is_banned: boolean | null;
+  regulation_reference: string | null;
+  notes: string | null;
+  risk_type: string;
+}
+
+export interface ComplianceRiskAnalysis {
+  new_risks: ComplianceRiskItem[];
+  markets: string[];
+}
+
+export interface StabilityRiskPairChange {
+  ingredient_a: string;
+  ingredient_b: string;
+  original_deduction: number;
+  new_deduction: number;
+  deduction_delta: number;
+  compatibility_level: string;
+  compatibility_score: number;
+  manifestation: string;
+  is_significant: boolean;
+}
+
+export interface StabilityImpactAnalysis {
+  original_total_score: number;
+  new_total_score: number;
+  score_delta: number;
+  original_risk_level: string;
+  new_risk_level: string;
+  significant_changes: StabilityRiskPairChange[];
+  all_pairs: StabilityRiskPairChange[];
+}
+
+export interface ExclusionConflictItem {
+  group_name: string;
+  conflicting_ingredients: string[];
+}
+
+export interface ImpactAnalysisResponse {
+  parent_version_id: number;
+  parent_version_number: number;
+  adjusted_ingredients: IngredientItem[];
+  cost_impact: CostImpactAnalysis;
+  compliance_risk: ComplianceRiskAnalysis;
+  stability_impact: StabilityImpactAnalysis;
+  exclusion_conflicts: ExclusionConflictItem[];
+}

@@ -1,10 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_
 from database import get_db
-from models import FormulaVersion, ProductLine, ExclusionGroup, Batch
-from schemas import FormulaVersionCreate, FormulaVersionResponse, VersionTreeNode, CompareResponse, CompareDiffItem, IngredientItem
+from models import FormulaVersion, ProductLine, ExclusionGroup, Batch, SupplierQuote, Regulation, CompatibilityRule
+from schemas import (
+    FormulaVersionCreate, FormulaVersionResponse, VersionTreeNode, CompareResponse, CompareDiffItem,
+    IngredientItem, ImpactAnalysisRequest, ImpactAnalysisResponse,
+    CostImpactAnalysis, CostImpactDetail,
+    ComplianceRiskAnalysis, ComplianceRiskItem,
+    StabilityImpactAnalysis, StabilityRiskPairChange,
+    ExclusionConflictItem
+)
 from utils import compute_batch_scores
+from datetime import date
 
 router = APIRouter(prefix="/api/versions", tags=["versions"])
 
@@ -248,3 +256,423 @@ async def get_version(version_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="版本不存在")
 
     return await build_version_response(version, db)
+
+
+def normalize_pair(a: str, b: str) -> tuple[str, str]:
+    return (a, b) if a <= b else (b, a)
+
+
+def get_risk_level(score: float) -> str:
+    if score >= 80:
+        return "低风险"
+    elif score >= 60:
+        return "中风险"
+    else:
+        return "高风险"
+
+
+CATEGORY_FALLBACK_ORDER = ["眼部", "唇部", "面部", "防晒", "染发", "烫发", "全身"]
+STATUS_COMPLIANT = "合规"
+STATUS_OVER_LIMIT = "超限"
+STATUS_BANNED = "禁用"
+STATUS_UNLISTED = "未收录"
+
+
+def _find_best_regulation(
+    ingredient_name: str,
+    regulations_map: dict[tuple[str, str], Regulation],
+    product_category: str
+) -> Regulation | None:
+    key_specific = (ingredient_name, product_category)
+    if key_specific in regulations_map:
+        return regulations_map[key_specific]
+
+    if product_category != "全身":
+        key_general = (ingredient_name, "全身")
+        if key_general in regulations_map:
+            return regulations_map[key_general]
+
+    for cat in CATEGORY_FALLBACK_ORDER:
+        key = (ingredient_name, cat)
+        if key in regulations_map:
+            return regulations_map[key]
+
+    return None
+
+
+def _check_ingredient_compliance(
+    ingredient: dict,
+    regulations_map: dict[tuple[str, str], Regulation],
+    product_category: str
+) -> dict:
+    name = ingredient["name"]
+    percentage = ingredient["percentage"]
+
+    reg = _find_best_regulation(name, regulations_map, product_category)
+
+    if reg is None:
+        return {
+            "ingredient_name": name,
+            "percentage": percentage,
+            "status": STATUS_UNLISTED,
+            "max_percentage": None,
+            "is_banned": None,
+            "product_category": None,
+            "matched_regulation_category": None,
+            "notes": "未收录,需人工确认",
+            "regulation_reference": None
+        }
+
+    if reg.is_banned:
+        return {
+            "ingredient_name": name,
+            "percentage": percentage,
+            "status": STATUS_BANNED,
+            "max_percentage": reg.max_percentage,
+            "is_banned": True,
+            "product_category": reg.product_category,
+            "matched_regulation_category": reg.product_category,
+            "notes": reg.notes,
+            "regulation_reference": reg.regulation_reference
+        }
+
+    if reg.max_percentage is not None and percentage > reg.max_percentage:
+        return {
+            "ingredient_name": name,
+            "percentage": percentage,
+            "status": STATUS_OVER_LIMIT,
+            "max_percentage": reg.max_percentage,
+            "is_banned": False,
+            "product_category": reg.product_category,
+            "matched_regulation_category": reg.product_category,
+            "notes": reg.notes,
+            "regulation_reference": reg.regulation_reference
+        }
+
+    return {
+        "ingredient_name": name,
+        "percentage": percentage,
+        "status": STATUS_COMPLIANT,
+        "max_percentage": reg.max_percentage,
+        "is_banned": False,
+        "product_category": reg.product_category,
+        "matched_regulation_category": reg.product_category,
+        "notes": reg.notes,
+        "regulation_reference": reg.regulation_reference
+    }
+
+
+async def _get_best_price_for_ingredient(
+    db: AsyncSession,
+    ingredient_name: str,
+    target_date: date | None = None
+) -> SupplierQuote | None:
+    if target_date is None:
+        target_date = date.today()
+
+    result = await db.execute(
+        select(SupplierQuote).where(
+            SupplierQuote.ingredient_name == ingredient_name,
+            SupplierQuote.valid_from <= target_date,
+            SupplierQuote.valid_to >= target_date
+        ).order_by(SupplierQuote.unit_price.asc())
+    )
+    quotes = result.scalars().all()
+    return quotes[0] if quotes else None
+
+
+async def _calculate_stability_risk(
+    ingredients: list[dict],
+    db: AsyncSession
+) -> tuple[float, list[dict], float]:
+    if len(ingredients) < 2:
+        return 100.0, [], 0.0
+
+    ingredient_map = {ing["name"]: ing["percentage"] for ing in ingredients}
+    ingredient_names = sorted(ingredient_map.keys())
+
+    pairs = []
+    for i in range(len(ingredient_names)):
+        for j in range(i + 1, len(ingredient_names)):
+            pairs.append((ingredient_names[i], ingredient_names[j]))
+
+    all_rules = {}
+    for ing_a, ing_b in pairs:
+        norm_a, norm_b = normalize_pair(ing_a, ing_b)
+        rule_result = await db.execute(
+            select(CompatibilityRule).where(
+                and_(
+                    CompatibilityRule.ingredient_a == norm_a,
+                    CompatibilityRule.ingredient_b == norm_b
+                )
+            )
+        )
+        rule = rule_result.scalar_one_or_none()
+        if rule:
+            all_rules[(ing_a, ing_b)] = rule
+
+    risk_pairs = []
+    total_deduction = 0.0
+
+    for (ing_a, ing_b), rule in all_rules.items():
+        if rule.compatibility_level in ["轻微不相容", "严重不相容"]:
+            pct_a = ingredient_map[ing_a]
+            pct_b = ingredient_map[ing_b]
+            deduction = (pct_a * pct_b * (100 - rule.compatibility_score)) / 1000
+            deduction = round(deduction, 4)
+            total_deduction += deduction
+
+            risk_pairs.append({
+                "ingredient_a": ing_a,
+                "ingredient_b": ing_b,
+                "percentage_a": pct_a,
+                "percentage_b": pct_b,
+                "compatibility_score": rule.compatibility_score,
+                "compatibility_level": rule.compatibility_level,
+                "manifestation": rule.manifestation,
+                "deduction": deduction
+            })
+
+    total_score = max(0.0, round(100 - total_deduction, 2))
+    risk_pairs.sort(key=lambda x: x["deduction"], reverse=True)
+
+    return total_score, risk_pairs, total_deduction
+
+
+@router.post("/impact-analysis", response_model=ImpactAnalysisResponse)
+async def analyze_impact(data: ImpactAnalysisRequest, db: AsyncSession = Depends(get_db)):
+    parent_result = await db.execute(
+        select(FormulaVersion).where(FormulaVersion.id == data.parent_version_id)
+    )
+    parent = parent_result.scalar_one_or_none()
+    if not parent:
+        raise HTTPException(status_code=404, detail="父版本不存在")
+
+    original_ing_map = {ing["name"]: ing["percentage"] for ing in parent.ingredients}
+
+    adjust_map = {adj.name: adj.percentage for adj in data.adjustments}
+
+    for name in adjust_map.keys():
+        if name not in original_ing_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"成分「{name}」不存在于父版本配方中"
+            )
+
+    new_ingredients = []
+    for name, pct in original_ing_map.items():
+        new_pct = adjust_map.get(name, pct)
+        new_ingredients.append({"name": name, "percentage": new_pct})
+
+    total_pct = round(sum(ing["percentage"] for ing in new_ingredients), 2)
+    if abs(total_pct - 100.0) > 0.01:
+        raise HTTPException(
+            status_code=400,
+            detail=f"所有成分百分比之和必须等于100%，当前为{total_pct}%"
+        )
+
+    exclusion_result = await db.execute(
+        select(ExclusionGroup).where(ExclusionGroup.product_line_id == parent.product_line_id)
+    )
+    exclusion_groups = exclusion_result.scalars().all()
+    ingredient_names = [ing["name"] for ing in new_ingredients]
+    exclusion_conflicts = []
+    for group in exclusion_groups:
+        found = []
+        for ing in group.ingredients:
+            if ing in ingredient_names:
+                found.append(ing)
+        if len(found) >= 2:
+            exclusion_conflicts.append(ExclusionConflictItem(
+                group_name=group.name,
+                conflicting_ingredients=found
+            ))
+
+    cost_details = []
+    missing_quotes = []
+    original_total_cost = 0.0
+    new_total_cost = 0.0
+
+    all_names = sorted(original_ing_map.keys())
+    for name in all_names:
+        original_pct = original_ing_map[name]
+        new_pct = adjust_map.get(name, original_pct)
+
+        best_quote = await _get_best_price_for_ingredient(db, name)
+        has_quote = best_quote is not None
+        unit_price = best_quote.unit_price if has_quote else None
+        supplier_name = best_quote.supplier_name if has_quote else None
+
+        original_cost = (original_pct / 100.0) * unit_price if has_quote else None
+        new_cost = (new_pct / 100.0) * unit_price if has_quote else None
+        cost_delta = (new_cost - original_cost) if (original_cost is not None and new_cost is not None) else None
+
+        if original_cost is not None:
+            original_total_cost += original_cost
+        if new_cost is not None:
+            new_total_cost += new_cost
+
+        if not has_quote:
+            missing_quotes.append(name)
+
+        cost_details.append(CostImpactDetail(
+            ingredient_name=name,
+            original_percentage=original_pct,
+            new_percentage=new_pct,
+            original_cost=original_cost,
+            new_cost=new_cost,
+            cost_delta=cost_delta,
+            unit_price=unit_price,
+            supplier_name=supplier_name
+        ))
+
+    total_delta = new_total_cost - original_total_cost
+    delta_percentage = (total_delta / original_total_cost * 100) if original_total_cost > 0 else 0.0
+
+    cost_impact = CostImpactAnalysis(
+        original_total_cost=round(original_total_cost, 4),
+        new_total_cost=round(new_total_cost, 4),
+        total_delta=round(total_delta, 4),
+        delta_percentage=round(delta_percentage, 2),
+        details=cost_details,
+        missing_quotes=missing_quotes
+    )
+
+    target_markets = ["中国", "欧盟"]
+    regulations_maps = {}
+    for market in target_markets:
+        reg_result = await db.execute(
+            select(Regulation).where(Regulation.target_market == market)
+        )
+        regulations = reg_result.scalars().all()
+        regulations_maps[market] = {(r.ingredient_name, r.product_category): r for r in regulations}
+
+    original_compliance_status = {}
+    new_compliance_status = {}
+
+    for market in target_markets:
+        original_statuses = []
+        new_statuses = []
+        for ing in parent.ingredients:
+            status = _check_ingredient_compliance(ing, regulations_maps[market], data.product_category)
+            original_statuses.append(status)
+        for ing in new_ingredients:
+            status = _check_ingredient_compliance(ing, regulations_maps[market], data.product_category)
+            new_statuses.append(status)
+        original_compliance_status[market] = {s["ingredient_name"]: s for s in original_statuses}
+        new_compliance_status[market] = {s["ingredient_name"]: s for s in new_statuses}
+
+    new_risks = []
+    for market in target_markets:
+        for ing_name, new_status in new_compliance_status[market].items():
+            original_status = original_compliance_status[market].get(ing_name)
+            if original_status and original_status["status"] == STATUS_COMPLIANT and new_status["status"] in [STATUS_OVER_LIMIT, STATUS_BANNED]:
+                risk_type = "超限" if new_status["status"] == STATUS_OVER_LIMIT else "禁用"
+                new_risks.append(ComplianceRiskItem(
+                    ingredient_name=ing_name,
+                    target_market=market,
+                    percentage=new_status["percentage"],
+                    status=new_status["status"],
+                    max_percentage=new_status["max_percentage"],
+                    is_banned=new_status["is_banned"],
+                    regulation_reference=new_status["regulation_reference"],
+                    notes=new_status["notes"],
+                    risk_type=risk_type
+                ))
+
+    compliance_risk = ComplianceRiskAnalysis(
+        new_risks=new_risks,
+        markets=target_markets
+    )
+
+    original_score, original_risk_pairs, original_deduction = await _calculate_stability_risk(parent.ingredients, db)
+    new_score, new_risk_pairs, new_deduction = await _calculate_stability_risk(new_ingredients, db)
+
+    original_pair_map = {}
+    for pair in original_risk_pairs:
+        key = (pair["ingredient_a"], pair["ingredient_b"])
+        original_pair_map[key] = pair
+
+    new_pair_map = {}
+    for pair in new_risk_pairs:
+        key = (pair["ingredient_a"], pair["ingredient_b"])
+        new_pair_map[key] = pair
+
+    all_pair_keys = set(original_pair_map.keys()) | set(new_pair_map.keys())
+    all_pair_changes = []
+
+    for key in all_pair_keys:
+        original_pair = original_pair_map.get(key)
+        new_pair = new_pair_map.get(key)
+
+        if original_pair and new_pair:
+            deduction_delta = round(new_pair["deduction"] - original_pair["deduction"], 4)
+            all_pair_changes.append({
+                "ingredient_a": key[0],
+                "ingredient_b": key[1],
+                "original_deduction": original_pair["deduction"],
+                "new_deduction": new_pair["deduction"],
+                "deduction_delta": deduction_delta,
+                "compatibility_level": new_pair["compatibility_level"],
+                "compatibility_score": new_pair["compatibility_score"],
+                "manifestation": new_pair["manifestation"],
+                "is_significant": abs(deduction_delta) > 5.0
+            })
+        elif original_pair:
+            all_pair_changes.append({
+                "ingredient_a": key[0],
+                "ingredient_b": key[1],
+                "original_deduction": original_pair["deduction"],
+                "new_deduction": 0.0,
+                "deduction_delta": round(-original_pair["deduction"], 4),
+                "compatibility_level": original_pair["compatibility_level"],
+                "compatibility_score": original_pair["compatibility_score"],
+                "manifestation": original_pair["manifestation"],
+                "is_significant": abs(round(-original_pair["deduction"], 4)) > 5.0
+            })
+        elif new_pair:
+            all_pair_changes.append({
+                "ingredient_a": key[0],
+                "ingredient_b": key[1],
+                "original_deduction": 0.0,
+                "new_deduction": new_pair["deduction"],
+                "deduction_delta": round(new_pair["deduction"], 4),
+                "compatibility_level": new_pair["compatibility_level"],
+                "compatibility_score": new_pair["compatibility_score"],
+                "manifestation": new_pair["manifestation"],
+                "is_significant": new_pair["deduction"] > 5.0
+            })
+
+    all_pair_changes.sort(key=lambda x: abs(x["deduction_delta"]), reverse=True)
+
+    significant_changes = [
+        StabilityRiskPairChange(**change)
+        for change in all_pair_changes
+        if change["is_significant"]
+    ]
+    all_pairs = [StabilityRiskPairChange(**change) for change in all_pair_changes]
+
+    stability_impact = StabilityImpactAnalysis(
+        original_total_score=original_score,
+        new_total_score=new_score,
+        score_delta=round(new_score - original_score, 2),
+        original_risk_level=get_risk_level(original_score),
+        new_risk_level=get_risk_level(new_score),
+        significant_changes=significant_changes,
+        all_pairs=all_pairs
+    )
+
+    adjusted_ingredients = [
+        IngredientItem(name=ing["name"], percentage=ing["percentage"])
+        for ing in new_ingredients
+    ]
+
+    return ImpactAnalysisResponse(
+        parent_version_id=parent.id,
+        parent_version_number=parent.version_number,
+        adjusted_ingredients=adjusted_ingredients,
+        cost_impact=cost_impact,
+        compliance_risk=compliance_risk,
+        stability_impact=stability_impact,
+        exclusion_conflicts=exclusion_conflicts
+    )

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline, Checkbox } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined } from '@ant-design/icons';
+import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline, Checkbox, Collapse } from 'antd';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse } from '../types';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse } from '../types';
 import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor } from '../api';
 
 const { Title, Text } = Typography;
@@ -78,6 +78,10 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [compareReport, setCompareReport] = useState<MultiMarketCompareResponse | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(false);
   const [hasRunComplianceCheck, setHasRunComplianceCheck] = useState(false);
+
+  const [impactAnalysisData, setImpactAnalysisData] = useState<ImpactAnalysisResponse | null>(null);
+  const [impactAnalysisLoading, setImpactAnalysisLoading] = useState(false);
+  const [showImpactPreview, setShowImpactPreview] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -558,7 +562,52 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
         percentage: ing.percentage
       }))
     });
+    setImpactAnalysisData(null);
+    setShowImpactPreview(false);
     setCreateVersionVisible(true);
+  };
+
+  const handleImpactPreview = async () => {
+    try {
+      const values = await versionForm.validateFields();
+      const ingredients = values.ingredients
+        .filter((item: any) => item.name && item.percentage !== undefined && item.percentage !== null)
+        .map((item: any) => ({
+          name: item.name.trim(),
+          percentage: Number(Number(item.percentage).toFixed(2))
+        }));
+
+      const originalMap = new Map(version.ingredients.map(ing => [ing.name, ing.percentage]));
+      const adjustments: IngredientItem[] = ingredients.filter((ing: IngredientItem) => {
+        const original = originalMap.get(ing.name);
+        return original !== undefined && Math.abs(original - ing.percentage) > 0.001;
+      });
+
+      if (adjustments.length === 0) {
+        message.info('没有检测到成分变化，请先调整成分比例');
+        return;
+      }
+
+      setImpactAnalysisLoading(true);
+      setShowImpactPreview(true);
+      try {
+        const data = await api.analyzeImpact(version.id, adjustments, selectedCategory);
+        setImpactAnalysisData(data);
+      } catch (e: any) {
+        let errMsg = '影响分析失败';
+        if (e?.response?.data?.detail) {
+          errMsg = typeof e.response.data.detail === 'string'
+            ? e.response.data.detail
+            : JSON.stringify(e.response.data.detail);
+        }
+        message.error(errMsg);
+        setShowImpactPreview(false);
+      } finally {
+        setImpactAnalysisLoading(false);
+      }
+    } catch {
+      message.warning('请先完善成分信息并确保百分比之和为100%');
+    }
   };
 
   const openRecommend = async () => {
@@ -2502,123 +2551,445 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
         open={createVersionVisible}
         onCancel={() => setCreateVersionVisible(false)}
         onOk={() => versionForm.submit()}
-        width={680}
+        width={880}
         okText="创建新版本"
       >
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
           系统已预填父版本的成分，请直接修改。百分比之和必须精确等于 100.00%。
         </Typography.Paragraph>
-        <Form
-          form={versionForm}
-          layout="vertical"
-          onFinish={handleCreateVersion}
-        >
-          <Form.List
-            name="ingredients"
-            rules={[
-              {
-                validator: async (_, ingredients) => {
-                  const total = calcTotal(ingredients);
-                  if (Math.abs(total - 100.0) > 0.01) {
-                    return Promise.reject(new Error(`百分比总和需等于100%，当前为 ${total.toFixed(2)}%`));
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form
+              form={versionForm}
+              layout="vertical"
+              onFinish={handleCreateVersion}
+            >
+              <Form.List
+                name="ingredients"
+                rules={[
+                  {
+                    validator: async (_, ingredients) => {
+                      const total = calcTotal(ingredients);
+                      if (Math.abs(total - 100.0) > 0.01) {
+                        return Promise.reject(new Error(`百分比总和需等于100%，当前为 ${total.toFixed(2)}%`));
+                      }
+                    }
                   }
-                }
-              }
-            ]}
-          >
-            {(fields, { add, remove }, { errors }) => (
-              <>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 120px 40px',
-                  gap: 8,
-                  fontWeight: 600,
-                  padding: '0 4px 8px 4px',
-                  borderBottom: '1px solid #f0f0f0',
-                  marginBottom: 8
-                }}>
-                  <span>成分名称</span>
-                  <span style={{ textAlign: 'right' }}>百分比%</span>
-                  <span></span>
-                </div>
-                {fields.map(({ key, name, ...restField }) => (
-                  <Row key={key} gutter={8} align="middle" style={{ marginBottom: 8 }}>
-                    <Col flex="auto">
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'name']}
-                        rules={[{ required: true, message: '必填' }]}
-                        style={{ marginBottom: 0 }}
+                ]}
+              >
+                {(fields, { add, remove }, { errors }) => (
+                  <>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 120px 40px',
+                      gap: 8,
+                      fontWeight: 600,
+                      padding: '0 4px 8px 4px',
+                      borderBottom: '1px solid #f0f0f0',
+                      marginBottom: 8
+                    }}>
+                      <span>成分名称</span>
+                      <span style={{ textAlign: 'right' }}>百分比%</span>
+                      <span></span>
+                    </div>
+                    <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+                      {fields.map(({ key, name, ...restField }) => (
+                        <Row key={key} gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                          <Col flex="auto">
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'name']}
+                              rules={[{ required: true, message: '必填' }]}
+                              style={{ marginBottom: 0 }}
+                            >
+                              <Input placeholder="成分名称" size="small" />
+                            </Form.Item>
+                          </Col>
+                          <Col style={{ width: 130 }}>
+                            <Form.Item
+                              {...restField}
+                              name={[name, 'percentage']}
+                              rules={[
+                                { required: true, message: '必填' },
+                                { type: 'number', min: 0, max: 100, message: '0-100之间' }
+                              ]}
+                              style={{ marginBottom: 0 }}
+                            >
+                              <InputNumber
+                                min={0}
+                                max={100}
+                                step={0.01}
+                                precision={2}
+                                style={{ width: '100%' }}
+                                suffix="%"
+                                size="small"
+                              />
+                            </Form.Item>
+                          </Col>
+                          <Col style={{ width: 40 }}>
+                            <MinusCircleOutlined
+                              onClick={() => remove(name)}
+                              style={{ color: '#f5222d', fontSize: 18, cursor: 'pointer' }}
+                            />
+                          </Col>
+                        </Row>
+                      ))}
+                    </div>
+                    <Form.Item style={{ marginTop: 8, marginBottom: 0 }}>
+                      <Button
+                        type="dashed"
+                        onClick={() => add({ name: '', percentage: 0 })}
+                        block
+                        icon={<PlusOutlined />}
+                        size="small"
                       >
-                        <Input placeholder="成分名称" />
-                      </Form.Item>
-                    </Col>
-                    <Col style={{ width: 130 }}>
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'percentage']}
-                        rules={[
-                          { required: true, message: '必填' },
-                          { type: 'number', min: 0, max: 100, message: '0-100之间' }
-                        ]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <InputNumber
-                          min={0}
-                          max={100}
-                          step={0.01}
-                          precision={2}
-                          style={{ width: '100%' }}
-                          suffix="%"
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col style={{ width: 40 }}>
-                      <MinusCircleOutlined
-                        onClick={() => remove(name)}
-                        style={{ color: '#f5222d', fontSize: 18, cursor: 'pointer' }}
-                      />
-                    </Col>
-                  </Row>
-                ))}
-                <Form.Item style={{ marginTop: 16 }}>
-                  <Button
-                    type="dashed"
-                    onClick={() => add({ name: '', percentage: 0 })}
-                    block
-                    icon={<PlusOutlined />}
-                  >
-                    添加成分
-                  </Button>
-                  <Form.ErrorList errors={errors} />
-                </Form.Item>
-              </>
-            )}
-          </Form.List>
+                        添加成分
+                      </Button>
+                      <Form.ErrorList errors={errors} />
+                    </Form.Item>
+                  </>
+                )}
+              </Form.List>
 
-          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.ingredients !== curr.ingredients}>
-            {({ getFieldsValue }) => {
-              const values = getFieldsValue();
-              const total = calcTotal(values.ingredients);
-              const ok = Math.abs(total - 100.0) <= 0.01;
-              return (
+              <Form.Item noStyle shouldUpdate={(prev, curr) => prev.ingredients !== curr.ingredients}>
+                {({ getFieldsValue }) => {
+                  const values = getFieldsValue();
+                  const total = calcTotal(values.ingredients);
+                  const ok = Math.abs(total - 100.0) <= 0.01;
+                  return (
+                    <div style={{
+                      padding: 10,
+                      background: ok ? '#f6ffed' : '#fff1f0',
+                      borderRadius: 6,
+                      border: `1px solid ${ok ? '#b7eb8f' : '#ffa39e'}`,
+                      textAlign: 'center',
+                      fontWeight: 600,
+                      marginTop: 12
+                    }}>
+                      <span style={{ color: ok ? '#52c41a' : '#f5222d' }}>
+                        当前合计：{total.toFixed(2)}%
+                        {ok ? ' ✓ 符合要求' : ' ✗ 需调整至100.00%'}
+                      </span>
+                    </div>
+                  );
+                }}
+              </Form.Item>
+
+              <Button
+                type="primary"
+                icon={<EyeOutlined />}
+                onClick={handleImpactPreview}
+                loading={impactAnalysisLoading}
+                block
+                style={{ marginTop: 12 }}
+              >
+                影响预览
+              </Button>
+            </Form>
+          </Col>
+          <Col span={12}>
+            <div style={{
+              border: '1px solid #f0f0f0',
+              borderRadius: 6,
+              padding: 12,
+              height: '100%',
+              minHeight: 420,
+              maxHeight: 500,
+              overflowY: 'auto'
+            }}>
+              {!showImpactPreview ? (
                 <div style={{
-                  padding: 12,
-                  background: ok ? '#f6ffed' : '#fff1f0',
-                  borderRadius: 6,
-                  border: `1px solid ${ok ? '#b7eb8f' : '#ffa39e'}`,
                   textAlign: 'center',
-                  fontWeight: 600
+                  color: '#999',
+                  paddingTop: 100
                 }}>
-                  <span style={{ color: ok ? '#52c41a' : '#f5222d' }}>
-                    当前合计：{total.toFixed(2)}%
-                    {ok ? ' ✓ 符合要求' : ' ✗ 需调整至100.00%'}
-                  </span>
+                  <CalculatorOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+                  <div>调整成分后点击"影响预览"</div>
+                  <div style={{ fontSize: 12 }}>查看成本、合规、稳定性综合影响</div>
                 </div>
-              );
-            }}
-          </Form.Item>
-        </Form>
+              ) : impactAnalysisLoading ? (
+                <div style={{ textAlign: 'center', paddingTop: 100, color: '#999' }}>
+                  正在分析影响...
+                </div>
+              ) : impactAnalysisData ? (
+                <>
+                  {impactAnalysisData.exclusion_conflicts.length > 0 && (
+                    <Alert
+                      message="存在互斥成分冲突"
+                      description={impactAnalysisData.exclusion_conflicts.map((c, i) => (
+                        <div key={i}>
+                          <b>{c.group_name}</b>: {c.conflicting_ingredients.join(', ')}
+                        </div>
+                      ))}
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                    />
+                  )}
+                  <Collapse
+                    defaultActiveKey={['cost', 'compliance', 'stability']}
+                    size="small"
+                    items={[
+                      {
+                        key: 'cost',
+                        label: (
+                          <Space>
+                            <DollarOutlined style={{ color: '#1890ff' }} />
+                            <span>成本变化</span>
+                            <Tag color={impactAnalysisData.cost_impact.total_delta > 0 ? 'red' : impactAnalysisData.cost_impact.total_delta < 0 ? 'green' : 'default'}>
+                              {impactAnalysisData.cost_impact.total_delta > 0 ? '+' : ''}{impactAnalysisData.cost_impact.total_delta.toFixed(4)} 元
+                            </Tag>
+                          </Space>
+                        ),
+                        children: (
+                          <div>
+                            <Row gutter={8} style={{ marginBottom: 12 }}>
+                              <Col span={12}>
+                                <Statistic
+                                  title="调整前"
+                                  value={impactAnalysisData.cost_impact.original_total_cost}
+                                  precision={4}
+                                  prefix="¥"
+                                />
+                              </Col>
+                              <Col span={12}>
+                                <Statistic
+                                  title="调整后"
+                                  value={impactAnalysisData.cost_impact.new_total_cost}
+                                  precision={4}
+                                  prefix="¥"
+                                  valueStyle={{ color: impactAnalysisData.cost_impact.total_delta > 0 ? '#f5222d' : impactAnalysisData.cost_impact.total_delta < 0 ? '#52c41a' : 'inherit' }}
+                                />
+                              </Col>
+                            </Row>
+                            <div style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              marginBottom: 6,
+                              color: '#666'
+                            }}>
+                              成本变化明细
+                            </div>
+                            <Table
+                              size="small"
+                              dataSource={impactAnalysisData.cost_impact.details.filter(d => d.cost_delta !== null && Math.abs(d.cost_delta) > 0.0001)}
+                              rowKey="ingredient_name"
+                              pagination={false}
+                              columns={[
+                                {
+                                  title: '成分',
+                                  dataIndex: 'ingredient_name',
+                                  key: 'ingredient_name',
+                                  width: '30%',
+                                  render: (text) => <span style={{ fontSize: 12 }}>{text}</span>
+                                },
+                                {
+                                  title: '比例变化',
+                                  key: 'pct',
+                                  width: '25%',
+                                  render: (_, record) => (
+                                    <span style={{ fontSize: 12 }}>
+                                      {record.original_percentage.toFixed(2)}% → {record.new_percentage.toFixed(2)}%
+                                    </span>
+                                  )
+                                },
+                                {
+                                  title: '成本变化',
+                                  key: 'cost',
+                                  width: '25%',
+                                  render: (_, record) => {
+                                    const delta = record.cost_delta;
+                                    if (delta === null) return <span style={{ color: '#999', fontSize: 12 }}>-</span>;
+                                    return (
+                                      <span style={{
+                                        color: delta > 0 ? '#f5222d' : delta < 0 ? '#52c41a' : '#999',
+                                        fontSize: 12
+                                      }}>
+                                        {delta > 0 ? '+' : ''}{delta.toFixed(4)}
+                                      </span>
+                                    );
+                                  }
+                                }
+                              ]}
+                            />
+                            {impactAnalysisData.cost_impact.missing_quotes.length > 0 && (
+                              <div style={{
+                                fontSize: 12,
+                                color: '#faad14',
+                                marginTop: 8
+                              }}>
+                                缺少报价的成分: {impactAnalysisData.cost_impact.missing_quotes.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'compliance',
+                        label: (
+                          <Space>
+                            <GlobalOutlined style={{ color: '#722ed1' }} />
+                            <span>合规风险</span>
+                            {impactAnalysisData.compliance_risk.new_risks.length > 0 && (
+                              <Tag color="red">
+                                {impactAnalysisData.compliance_risk.new_risks.length} 项新增风险
+                              </Tag>
+                            )}
+                          </Space>
+                        ),
+                        children: (
+                          <div>
+                            {impactAnalysisData.compliance_risk.new_risks.length === 0 ? (
+                              <div style={{
+                                padding: 20,
+                                textAlign: 'center',
+                                color: '#52c41a'
+                              }}>
+                                <CheckCircleOutlined style={{ fontSize: 32, marginBottom: 8 }} />
+                                <div>未发现新增合规风险</div>
+                                <div style={{ fontSize: 12, color: '#999' }}>
+                                  检测市场: {impactAnalysisData.compliance_risk.markets.join(', ')}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div style={{
+                                  fontSize: 12,
+                                  color: '#666',
+                                  marginBottom: 8
+                                }}>
+                                  调整后新增的合规问题：
+                                </div>
+                                {impactAnalysisData.compliance_risk.new_risks.map((risk, index) => (
+                                  <Alert
+                                    key={index}
+                                    message={
+                                      <Space size="small">
+                                        <Tag color="red">{risk.target_market}</Tag>
+                                        <Tag color={risk.risk_type === '禁用' ? '#a8071a' : 'orange'}>
+                                          {risk.risk_type}
+                                        </Tag>
+                                        <span style={{ fontWeight: 600 }}>{risk.ingredient_name}</span>
+                                        <span style={{ fontSize: 12, color: '#666' }}>
+                                          {risk.percentage.toFixed(2)}%
+                                          {risk.max_percentage !== null && ` / 限用${risk.max_percentage}%`}
+                                        </span>
+                                      </Space>
+                                    }
+                                    description={risk.notes || risk.regulation_reference || ''}
+                                    type="error"
+                                    showIcon
+                                    style={{ marginBottom: 8 }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'stability',
+                        label: (
+                          <Space>
+                            <SafetyOutlined style={{ color: '#13c2c2' }} />
+                            <span>稳定性影响</span>
+                            <Tag color={impactAnalysisData.stability_impact.score_delta < 0 ? 'red' : impactAnalysisData.stability_impact.score_delta > 0 ? 'green' : 'default'}>
+                              {impactAnalysisData.stability_impact.score_delta > 0 ? '+' : ''}{impactAnalysisData.stability_impact.score_delta.toFixed(2)} 分
+                            </Tag>
+                          </Space>
+                        ),
+                        children: (
+                          <div>
+                            <Row gutter={8} style={{ marginBottom: 12 }}>
+                              <Col span={12}>
+                                <Statistic
+                                  title="调整前"
+                                  value={impactAnalysisData.stability_impact.original_total_score}
+                                  suffix="分"
+                                />
+                                <Tag color={getScoreColor(impactAnalysisData.stability_impact.original_total_score / 10)}>
+                                  {impactAnalysisData.stability_impact.original_risk_level}
+                                </Tag>
+                              </Col>
+                              <Col span={12}>
+                                <Statistic
+                                  title="调整后"
+                                  value={impactAnalysisData.stability_impact.new_total_score}
+                                  suffix="分"
+                                  valueStyle={{ color: impactAnalysisData.stability_impact.score_delta < 0 ? '#f5222d' : '#52c41a' }}
+                                />
+                                <Tag color={getScoreColor(impactAnalysisData.stability_impact.new_total_score / 10)}>
+                                  {impactAnalysisData.stability_impact.new_risk_level}
+                                </Tag>
+                              </Col>
+                            </Row>
+                            <Progress
+                              percent={impactAnalysisData.stability_impact.new_total_score}
+                              showInfo={false}
+                              strokeColor={getScoreColor(impactAnalysisData.stability_impact.new_total_score / 10)}
+                              strokeWidth={8}
+                              style={{ marginBottom: 12 }}
+                            />
+                            {impactAnalysisData.stability_impact.significant_changes.length > 0 && (
+                              <>
+                                <div style={{
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: '#f5222d',
+                                  marginBottom: 6
+                                }}>
+                                  ⚠️ 显著变化的成分对（变化＞5分）
+                                </div>
+                                {impactAnalysisData.stability_impact.significant_changes.map((pair, index) => (
+                                  <div
+                                    key={index}
+                                    style={{
+                                      padding: 8,
+                                      background: pair.deduction_delta > 0 ? '#fff1f0' : '#f6ffed',
+                                      borderRadius: 4,
+                                      marginBottom: 6,
+                                      fontSize: 12
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                                      {pair.ingredient_a} + {pair.ingredient_b}
+                                      <Tag
+                                        color={pair.deduction_delta > 0 ? 'red' : 'green'}
+                                        style={{ marginLeft: 8 }}
+                                      >
+                                        {pair.deduction_delta > 0 ? '风险增加' : '风险降低'} {Math.abs(pair.deduction_delta).toFixed(2)}分
+                                      </Tag>
+                                    </div>
+                                    <div style={{ color: '#666' }}>
+                                      {pair.manifestation}（{pair.compatibility_level}）
+                                    </div>
+                                    <div style={{ color: '#999', fontSize: 11 }}>
+                                      扣分项: {pair.original_deduction.toFixed(2)} → {pair.new_deduction.toFixed(2)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                            {impactAnalysisData.stability_impact.significant_changes.length === 0 && (
+                              <div style={{
+                                padding: 12,
+                                textAlign: 'center',
+                                color: '#52c41a',
+                                fontSize: 12
+                              }}>
+                                无显著变化的成分对（变化≤5分）
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                    ]}
+                  />
+                </>
+              ) : null}
+            </div>
+          </Col>
+        </Row>
       </Modal>
 
       <Modal

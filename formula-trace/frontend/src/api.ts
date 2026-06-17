@@ -37,6 +37,8 @@ import type {
   Regulation,
   RegulationCreate,
   RegulationBatchImportResult,
+  ImpactAnalysisResponse,
+  IngredientItem,
 } from './types';
 
 const API_BASE = '/api';
@@ -62,6 +64,13 @@ export const api = {
 
   compareVersions: (leftId: number, rightId: number): Promise<CompareResponse> =>
     axios.get(`${API_BASE}/versions/compare`, { params: { left_id: leftId, right_id: rightId } }).then(r => r.data),
+
+  analyzeImpact: (parentVersionId: number, adjustments: IngredientItem[], productCategory: string = '全身'): Promise<ImpactAnalysisResponse> =>
+    axios.post(`${API_BASE}/versions/impact-analysis`, {
+      parent_version_id: parentVersionId,
+      adjustments,
+      product_category: productCategory
+    }).then(r => r.data),
 
   getIngredientTrend: (productLineId: number, ingredientName: string): Promise<IngredientTrendResponse> =>
     axios.get(`${API_BASE}/analytics/ingredient-trend`, {

@@ -659,3 +659,88 @@ class MultiMarketCompareResponse(BaseModel):
     target_markets: list[str]
     items: list[MultiMarketCompareItem]
     inconsistent_ingredients: list[str]
+
+
+class ImpactAnalysisIngredientAdjustment(BaseModel):
+    name: str
+    percentage: float
+
+
+class ImpactAnalysisRequest(BaseModel):
+    parent_version_id: int
+    adjustments: list[ImpactAnalysisIngredientAdjustment]
+    product_category: str = Field("全身", min_length=1, max_length=100)
+
+
+class CostImpactDetail(BaseModel):
+    ingredient_name: str
+    original_percentage: float
+    new_percentage: float
+    original_cost: float | None
+    new_cost: float | None
+    cost_delta: float | None
+    unit_price: float | None
+    supplier_name: str | None
+
+
+class CostImpactAnalysis(BaseModel):
+    original_total_cost: float
+    new_total_cost: float
+    total_delta: float
+    delta_percentage: float
+    details: list[CostImpactDetail]
+    missing_quotes: list[str]
+
+
+class ComplianceRiskItem(BaseModel):
+    ingredient_name: str
+    target_market: str
+    percentage: float
+    status: str
+    max_percentage: float | None
+    is_banned: bool | None
+    regulation_reference: str | None
+    notes: str | None
+    risk_type: str
+
+
+class ComplianceRiskAnalysis(BaseModel):
+    new_risks: list[ComplianceRiskItem]
+    markets: list[str]
+
+
+class StabilityRiskPairChange(BaseModel):
+    ingredient_a: str
+    ingredient_b: str
+    original_deduction: float
+    new_deduction: float
+    deduction_delta: float
+    compatibility_level: str
+    compatibility_score: float
+    manifestation: str
+    is_significant: bool
+
+
+class StabilityImpactAnalysis(BaseModel):
+    original_total_score: float
+    new_total_score: float
+    score_delta: float
+    original_risk_level: str
+    new_risk_level: str
+    significant_changes: list[StabilityRiskPairChange]
+    all_pairs: list[StabilityRiskPairChange]
+
+
+class ExclusionConflictItem(BaseModel):
+    group_name: str
+    conflicting_ingredients: list[str]
+
+
+class ImpactAnalysisResponse(BaseModel):
+    parent_version_id: int
+    parent_version_number: int
+    adjusted_ingredients: list[IngredientItem]
+    cost_impact: CostImpactAnalysis
+    compliance_risk: ComplianceRiskAnalysis
+    stability_impact: StabilityImpactAnalysis
+    exclusion_conflicts: list[ExclusionConflictItem]
