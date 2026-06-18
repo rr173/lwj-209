@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline, Checkbox, Collapse } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined, StarFilled, ClockCircleOutlined, ScheduleOutlined, FlagOutlined } from '@ant-design/icons';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined, StarFilled, ClockCircleOutlined, ScheduleOutlined, FlagOutlined, SwapOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate } from '../types';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate, SubstitutionPlanListResponse, SubstitutionPlan, SubstitutionPlanIngredient } from '../types';
 import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor } from '../api';
 
 const { Title, Text } = Typography;
@@ -94,6 +94,12 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
 
   const [lifecycleStats, setLifecycleStats] = useState<ProductLineLifecycleStats | null>(null);
   const [lifecycleStatsLoading, setLifecycleStatsLoading] = useState(false);
+
+  const [substitutionModalVisible, setSubstitutionModalVisible] = useState(false);
+  const [substitutionIngredient, setSubstitutionIngredient] = useState<string>('');
+  const [substitutionPlansData, setSubstitutionPlansData] = useState<SubstitutionPlanListResponse | null>(null);
+  const [substitutionPlansLoading, setSubstitutionPlansLoading] = useState(false);
+  const [selectedPlanPreview, setSelectedPlanPreview] = useState<SubstitutionPlan | null>(null);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -889,6 +895,22 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     }));
   }, [trendData]);
 
+  const handleOpenSubstitution = async (ingredientName: string) => {
+    setSubstitutionIngredient(ingredientName);
+    setSubstitutionModalVisible(true);
+    setSubstitutionPlansLoading(true);
+    setSelectedPlanPreview(null);
+    setSubstitutionPlansData(null);
+    try {
+      const data = await api.generateSubstitutionPlans(version.id, ingredientName);
+      setSubstitutionPlansData(data);
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '加载替代方案失败');
+    } finally {
+      setSubstitutionPlansLoading(false);
+    }
+  };
+
   const renderOverviewTab = () => (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
@@ -913,7 +935,7 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               {
                 title: '',
                 key: 'bar',
-                render: (_: any, record: { percentage: number }) => (
+                render: (_: any, record: IngredientItem) => (
                   <div style={{ width: 100, height: 8, background: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
                     <div
                       style={{
@@ -923,6 +945,21 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
                       }}
                     />
                   </div>
+                )
+              },
+              {
+                title: '',
+                key: 'action',
+                width: 80,
+                render: (_: any, record: IngredientItem) => (
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<SwapOutlined />}
+                    onClick={() => handleOpenSubstitution(record.name)}
+                  >
+                    找替代
+                  </Button>
                 )
               }
             ]}
@@ -3761,6 +3798,171 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
             description="里程碑到达目标日期但未标记完成时，系统会自动标记为已逾期。同一版本下不允许创建同名里程碑。"
           />
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <SwapOutlined />
+            <span>替代方案推荐 — {substitutionIngredient}</span>
+          </Space>
+        }
+        open={substitutionModalVisible}
+        onCancel={() => {
+          setSubstitutionModalVisible(false);
+          setSelectedPlanPreview(null);
+          setSubstitutionPlansData(null);
+        }}
+        footer={null}
+        width={960}
+        destroyOnClose
+      >
+        {substitutionPlansLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Text type="secondary">正在生成替代方案...</Text>
+          </div>
+        ) : substitutionPlansData && substitutionPlansData.plans.length === 0 ? (
+          <Empty description={`暂无「${substitutionIngredient}」的替代品配置，请先在替代关系管理中添加`} />
+        ) : substitutionPlansData ? (
+          <div>
+            <Alert
+              style={{ marginBottom: 16 }}
+              type="info"
+              showIcon
+              message={`原成分「${substitutionIngredient}」占比 ${substitutionPlansData.original_percentage.toFixed(2)}%，以下为按综合推荐度排序的替代方案`}
+            />
+            <Row gutter={[16, 16]}>
+              {substitutionPlansData.plans.map((plan, idx) => (
+                <Col span={selectedPlanPreview ? 12 : 8} key={plan.substitute_ingredient}>
+                  <Card
+                    size="small"
+                    hoverable
+                    style={{
+                      borderColor: selectedPlanPreview?.substitute_ingredient === plan.substitute_ingredient ? '#1890ff' : undefined,
+                      borderWidth: selectedPlanPreview?.substitute_ingredient === plan.substitute_ingredient ? 2 : 1,
+                    }}
+                    onClick={() => setSelectedPlanPreview(
+                      selectedPlanPreview?.substitute_ingredient === plan.substitute_ingredient ? null : plan
+                    )}
+                  >
+                    <div style={{ marginBottom: 8 }}>
+                      <Space>
+                        <Text strong style={{ fontSize: 15 }}>{plan.substitute_ingredient}</Text>
+                        <Tag color={plan.fitness_score >= 80 ? 'green' : plan.fitness_score >= 60 ? 'orange' : 'red'}>
+                          适配度 {plan.fitness_score}
+                        </Tag>
+                      </Space>
+                    </div>
+                    <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>
+                      建议用量比例: ×{plan.suggested_ratio} → 替代后占比: {plan.new_percentage.toFixed(2)}%
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <Space size={4} wrap>
+                        {plan.has_conflict && (
+                          <Tag color="error" icon={<ExclamationCircleOutlined />}>有冲突</Tag>
+                        )}
+                        {plan.has_compliance_risk && (
+                          <Tag color="warning" icon={<ExclamationCircleOutlined />}>合规风险</Tag>
+                        )}
+                        {plan.sensory_impact === '感官可能有变化' && (
+                          <Tag color="orange">感官可能变化</Tag>
+                        )}
+                      </Space>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                      成本变化: {plan.cost_change_rate !== null ? (
+                        <span style={{ color: plan.cost_change_rate > 0 ? '#f5222d' : plan.cost_change_rate < 0 ? '#52c41a' : '#666' }}>
+                          {plan.cost_change_rate > 0 ? '+' : ''}{plan.cost_change_rate.toFixed(2)}%
+                        </span>
+                      ) : '无报价数据'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                      稳定性变化: {plan.stability_risk_change !== null ? (
+                        <span style={{ color: plan.stability_risk_change < 0 ? '#f5222d' : plan.stability_risk_change > 0 ? '#52c41a' : '#666' }}>
+                          {plan.stability_risk_change > 0 ? '+' : ''}{plan.stability_risk_change.toFixed(2)}分
+                        </span>
+                      ) : '-'}
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text style={{ fontSize: 12, color: '#666' }}>综合推荐度</Text>
+                      <Progress
+                        percent={plan.overall_recommendation}
+                        size="small"
+                        strokeColor={plan.overall_recommendation >= 70 ? '#52c41a' : plan.overall_recommendation >= 50 ? '#faad14' : '#f5222d'}
+                        format={(p) => `${p?.toFixed(1)}`}
+                      />
+                    </div>
+                    {(plan.has_conflict || plan.has_compliance_risk) && (
+                      <div style={{ fontSize: 11, color: '#999' }}>
+                        {plan.conflict_details.map((d, i) => <div key={`c${i}`}>⚠️ {d}</div>)}
+                        {plan.compliance_risk_details.map((d, i) => <div key={`r${i}`}>⚠️ {d}</div>)}
+                      </div>
+                    )}
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+            {selectedPlanPreview && (
+              <div style={{ marginTop: 16 }}>
+                <Divider orientation="left" style={{ fontSize: 13 }}>
+                  替换预览：{substitutionIngredient} → {selectedPlanPreview.substitute_ingredient}
+                </Divider>
+                <Table
+                  size="small"
+                  pagination={false}
+                  dataSource={selectedPlanPreview.full_ingredients.map(ing => ({
+                    ...ing,
+                    key: ing.name,
+                  }))}
+                  columns={[
+                    {
+                      title: '成分名称',
+                      dataIndex: 'name',
+                      key: 'name',
+                      render: (name: string, record: SubstitutionPlanIngredient) => (
+                        <Space>
+                          {name}
+                          {record.is_new && <Tag color="blue">替代品</Tag>}
+                          {name === substitutionIngredient && <Tag color="default">原成分→移除</Tag>}
+                        </Space>
+                      )
+                    },
+                    {
+                      title: '百分比',
+                      dataIndex: 'percentage',
+                      key: 'percentage',
+                      width: 120,
+                      render: (v: number) => (
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                      )
+                    },
+                    {
+                      title: '变化',
+                      key: 'change',
+                      width: 100,
+                      render: (_: any, record: SubstitutionPlanIngredient) => {
+                        const orig = allIngredients.find(i => i.name === record.name);
+                        if (!orig) return <Tag color="blue">新增</Tag>;
+                        const diff = record.percentage - orig.percentage;
+                        if (Math.abs(diff) < 0.005) return <Text type="secondary">-</Text>;
+                        return (
+                          <Text style={{ color: diff > 0 ? '#52c41a' : '#f5222d', fontFamily: 'monospace' }}>
+                            {diff > 0 ? '+' : ''}{diff.toFixed(2)}%
+                          </Text>
+                        );
+                      }
+                    }
+                  ]}
+                />
+                <div style={{ marginTop: 8, textAlign: 'right' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    合计: {selectedPlanPreview.full_ingredients.reduce((s, i) => s + i.percentage, 0).toFixed(2)}%
+                  </Text>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
       </Modal>
     </Space>
   );

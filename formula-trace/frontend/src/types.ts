@@ -755,3 +755,50 @@ export interface ProductLineLifecycleStats {
   avg_version_survival_rounds: number | null;
   overdue_milestone_count: number;
 }
+
+export interface IngredientSubstitution {
+  id: number;
+  primary_ingredient: string;
+  substitute_ingredient: string;
+  fitness_score: number;
+  suggested_ratio: number;
+}
+
+export interface IngredientSubstitutionCreate {
+  primary_ingredient: string;
+  substitute_ingredient: string;
+  fitness_score: number;
+  suggested_ratio: number;
+}
+
+export interface SubstitutionPlanIngredient {
+  name: string;
+  percentage: number;
+  is_new: boolean;
+}
+
+export interface SubstitutionPlan {
+  substitute_ingredient: string;
+  fitness_score: number;
+  suggested_ratio: number;
+  new_percentage: number;
+  remaining_redistributed: SubstitutionPlanIngredient[];
+  full_ingredients: SubstitutionPlanIngredient[];
+  has_conflict: boolean;
+  conflict_details: string[];
+  has_compliance_risk: boolean;
+  compliance_risk_details: string[];
+  cost_change_rate: number | null;
+  stability_risk_change: number | null;
+  sensory_impact: string;
+  cost_change_score: number | null;
+  stability_score: number | null;
+  overall_recommendation: number;
+}
+
+export interface SubstitutionPlanListResponse {
+  version_id: number;
+  ingredient_name: string;
+  original_percentage: number;
+  plans: SubstitutionPlan[];
+}

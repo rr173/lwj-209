@@ -52,6 +52,9 @@ import type {
   Milestone,
   MilestoneCreate,
   ProductLineLifecycleStats,
+  IngredientSubstitution,
+  IngredientSubstitutionCreate,
+  SubstitutionPlanListResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -328,6 +331,23 @@ export const api = {
 
   getProductLineLifecycleStats: (productLineId: number): Promise<ProductLineLifecycleStats> =>
     axios.get(`${API_BASE}/lifecycle/product-line/${productLineId}/stats`).then(r => r.data),
+
+  createSubstitution: (data: IngredientSubstitutionCreate): Promise<IngredientSubstitution> =>
+    axios.post(`${API_BASE}/substitutions`, data).then(r => r.data),
+
+  listSubstitutions: (primaryIngredient?: string): Promise<IngredientSubstitution[]> =>
+    axios.get(`${API_BASE}/substitutions`, {
+      params: primaryIngredient ? { primary_ingredient: primaryIngredient } : {}
+    }).then(r => r.data),
+
+  deleteSubstitution: (substitutionId: number): Promise<void> =>
+    axios.delete(`${API_BASE}/substitutions/${substitutionId}`).then(r => r.data),
+
+  generateSubstitutionPlans: (versionId: number, ingredientName: string): Promise<SubstitutionPlanListResponse> =>
+    axios.post(`${API_BASE}/substitutions/plans`, {
+      version_id: versionId,
+      ingredient_name: ingredientName
+    }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

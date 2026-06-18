@@ -5,7 +5,7 @@ from models import (
     ProductLine, ExclusionGroup, FormulaVersion, Batch, SupplierQuote,
     IngredientTypeConfig, CompatibilityRule, IngredientInventory,
     InventoryTransaction, Regulation, ApprovalRecord, ReviewMeeting,
-    ReviewScore, ReviewDecision, ComplianceCheckRecord
+    ReviewScore, ReviewDecision, ComplianceCheckRecord, IngredientSubstitution
 )
 
 
@@ -470,5 +470,34 @@ async def seed_database():
                     notes=reg["notes"]
                 )
                 db.add(regulation)
+
+        sub_check = await db.execute(
+            select(IngredientSubstitution).where(
+                IngredientSubstitution.primary_ingredient == "烟酰胺"
+            )
+        )
+        if not sub_check.scalar_one_or_none():
+            seed_substitutions = [
+                {"primary": "烟酰胺", "substitute": "熊果苷", "fitness": 85, "ratio": 0.6},
+                {"primary": "烟酰胺", "substitute": "维生素C糖苷", "fitness": 72, "ratio": 1.2},
+                {"primary": "烟酰胺", "substitute": "甘草酸二钾", "fitness": 60, "ratio": 0.8},
+                {"primary": "维生素C糖苷", "substitute": "熊果苷", "fitness": 80, "ratio": 0.9},
+                {"primary": "维生素C糖苷", "substitute": "烟酰胺", "fitness": 65, "ratio": 0.5},
+                {"primary": "熊果苷", "substitute": "烟酰胺", "fitness": 78, "ratio": 1.5},
+                {"primary": "熊果苷", "substitute": "甘草酸二钾", "fitness": 70, "ratio": 0.7},
+                {"primary": "透明质酸钠", "substitute": "甘油", "fitness": 55, "ratio": 10.0},
+                {"primary": "水杨酸", "substitute": "甘草酸二钾", "fitness": 68, "ratio": 1.0},
+                {"primary": "泛醇", "substitute": "红没药醇", "fitness": 75, "ratio": 0.8},
+                {"primary": "甘油", "substitute": "丙二醇", "fitness": 88, "ratio": 0.9},
+                {"primary": "丙二醇", "substitute": "甘油", "fitness": 90, "ratio": 1.1},
+            ]
+            for s in seed_substitutions:
+                sub = IngredientSubstitution(
+                    primary_ingredient=s["primary"],
+                    substitute_ingredient=s["substitute"],
+                    fitness_score=s["fitness"],
+                    suggested_ratio=s["ratio"]
+                )
+                db.add(sub)
 
         await db.commit()

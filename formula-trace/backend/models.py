@@ -333,6 +333,20 @@ class Milestone(Base):
     version = relationship("FormulaVersion")
 
 
+class IngredientSubstitution(Base):
+    __tablename__ = "ingredient_substitutions"
+    __table_args__ = (
+        UniqueConstraint("primary_ingredient", "substitute_ingredient", name="unique_substitution_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    primary_ingredient: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    substitute_ingredient: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    fitness_score: Mapped[float] = mapped_column(Float, nullable=False)
+    suggested_ratio: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+
 class ComplianceCheckRecord(Base):
     __tablename__ = "compliance_check_records"
 

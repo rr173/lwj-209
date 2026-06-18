@@ -1054,6 +1054,68 @@ class MilestoneResponse(BaseModel):
         from_attributes = True
 
 
+class IngredientSubstitutionCreate(BaseModel):
+    primary_ingredient: str = Field(..., min_length=1, max_length=200)
+    substitute_ingredient: str = Field(..., min_length=1, max_length=200)
+    fitness_score: float = Field(..., ge=0, le=100)
+    suggested_ratio: float = Field(..., gt=0, le=2)
+
+    @field_validator('substitute_ingredient')
+    @classmethod
+    def check_not_same(cls, v, values):
+        if 'primary_ingredient' in values.data and v == values.data['primary_ingredient']:
+            raise ValueError('替代成分不能与主成分相同')
+        return v
+
+
+class IngredientSubstitutionResponse(BaseModel):
+    id: int
+    primary_ingredient: str
+    substitute_ingredient: str
+    fitness_score: float
+    suggested_ratio: float
+
+    class Config:
+        from_attributes = True
+
+
+class SubstitutionPlanIngredient(BaseModel):
+    name: str
+    percentage: float
+    is_new: bool = False
+
+
+class SubstitutionPlan(BaseModel):
+    substitute_ingredient: str
+    fitness_score: float
+    suggested_ratio: float
+    new_percentage: float
+    remaining_redistributed: list[SubstitutionPlanIngredient]
+    full_ingredients: list[SubstitutionPlanIngredient]
+    has_conflict: bool
+    conflict_details: list[str]
+    has_compliance_risk: bool
+    compliance_risk_details: list[str]
+    cost_change_rate: float | None
+    stability_risk_change: float | None
+    sensory_impact: str
+    cost_change_score: float | None
+    stability_score: float | None
+    overall_recommendation: float
+
+
+class SubstitutionPlanRequest(BaseModel):
+    version_id: int
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+
+
+class SubstitutionPlanListResponse(BaseModel):
+    version_id: int
+    ingredient_name: str
+    original_percentage: float
+    plans: list[SubstitutionPlan]
+
+
 class ProductLineLifecycleStats(BaseModel):
     product_line_id: int
     avg_days_to_first_batch: Optional[float]
