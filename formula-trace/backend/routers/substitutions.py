@@ -250,72 +250,87 @@ async def generate_substitution_plans(
 
     plans = []
     for sub in substitutions:
-        sub_percentage = round(original_percentage * sub.suggested_ratio, 2)
-        remaining = round(original_percentage - sub_percentage, 2)
+        sub_percentage_needed = round(original_percentage * sub.suggested_ratio, 2)
 
-        new_ingredients = []
+        base_ingredients = []
         other_total = 0.0
+        substitute_already_exists = False
+        substitute_existing_percentage = 0.0
+
         for ing in original_ingredients:
             if ing["name"] == data.ingredient_name:
                 continue
-            new_ingredients.append({"name": ing["name"], "percentage": ing["percentage"]})
+            if ing["name"] == sub.substitute_ingredient:
+                substitute_already_exists = True
+                substitute_existing_percentage = ing["percentage"]
+                continue
+            base_ingredients.append({"name": ing["name"], "percentage": ing["percentage"]})
             other_total += ing["percentage"]
 
-        redistributed = []
-        if remaining > 0 and other_total > 0:
-            for ing in new_ingredients:
-                adjusted_pct = round(
-                    ing["percentage"] + (ing["percentage"] / other_total) * remaining,
-                    2
-                )
-                redistributed.append({
+        sub_new_percentage = round(substitute_existing_percentage + sub_percentage_needed, 2)
+
+        delta = round(original_percentage - sub_percentage_needed, 2)
+
+        final_ingredients = []
+        if other_total > 0 and abs(delta) > 0.001:
+            for ing in base_ingredients:
+                adjustment = round((ing["percentage"] / other_total) * delta, 2)
+                adjusted_pct = round(ing["percentage"] + adjustment, 2)
+                adjusted_pct = max(0.0, adjusted_pct)
+                final_ingredients.append({
                     "name": ing["name"],
                     "percentage": adjusted_pct,
                     "is_new": False
                 })
         else:
-            for ing in new_ingredients:
-                redistributed.append({
+            for ing in base_ingredients:
+                final_ingredients.append({
                     "name": ing["name"],
                     "percentage": ing["percentage"],
                     "is_new": False
                 })
 
-        sub_entry_exists = any(ing["name"] == sub.substitute_ingredient for ing in redistributed)
-        if sub_entry_exists:
-            for ing in redistributed:
-                if ing["name"] == sub.substitute_ingredient:
-                    ing["percentage"] = round(ing["percentage"] + sub_percentage, 2)
-                    break
-        else:
-            redistributed.append({
-                "name": sub.substitute_ingredient,
-                "percentage": sub_percentage,
-                "is_new": True
+        final_ingredients.append({
+            "name": sub.substitute_ingredient,
+            "percentage": sub_new_percentage,
+            "is_new": not substitute_already_exists
+        })
+
+        current_total = round(sum(ing["percentage"] for ing in final_ingredients), 2)
+        total_diff = round(100.0 - current_total, 2)
+        if abs(total_diff) > 0.001 and final_ingredients:
+            max_ing = max(final_ingredients, key=lambda x: x["percentage"] if x["name"] != sub.substitute_ingredient else -1)
+            max_ing["percentage"] = round(max_ing["percentage"] + total_diff, 2)
+            max_ing["percentage"] = max(0.0, max_ing["percentage"])
+
+        final_ingredients.sort(key=lambda x: x["percentage"], reverse=True)
+
+        remaining_redistributed = []
+        for ing in final_ingredients:
+            if ing["name"] == sub.substitute_ingredient:
+                continue
+            remaining_redistributed.append({
+                "name": ing["name"],
+                "percentage": ing["percentage"],
+                "is_new": False
             })
 
-        total_check = round(sum(ing["percentage"] for ing in redistributed), 2)
-        if abs(total_check - 100.0) > 0.02:
-            diff = round(100.0 - total_check, 2)
-            if redistributed:
-                redistributed[0]["percentage"] = round(redistributed[0]["percentage"] + diff, 2)
-
         full_ingredients = [
-            SubstitutionPlanIngredient(**ing) for ing in redistributed
+            SubstitutionPlanIngredient(**ing) for ing in final_ingredients
         ]
 
-        ingredient_names = [ing["name"] for ing in redistributed]
+        ingredient_names = [ing["name"] for ing in final_ingredients]
         conflict_details = await _check_exclusion_conflicts(
             ingredient_names, version.product_line_id, db
         )
 
-        compliance_details = await _check_compliance_risks(redistributed, db)
+        compliance_details = await _check_compliance_risks(final_ingredients, db)
 
-        new_stability = await _calculate_stability_score(redistributed, db)
+        new_stability = await _calculate_stability_score(final_ingredients, db)
         stability_change = round(new_stability - original_stability, 2)
 
         new_cost_total = 0.0
-        for ing in redistributed:
+        for ing in final_ingredients:
             price = await _get_best_price(db, ing["name"])
             if price is not None:
                 new_cost_total += (ing["percentage"] / 100.0) * price
@@ -357,10 +372,10 @@ async def generate_substitution_plans(
             substitute_ingredient=sub.substitute_ingredient,
             fitness_score=sub.fitness_score,
             suggested_ratio=sub.suggested_ratio,
-            new_percentage=sub_percentage,
+            new_percentage=sub_percentage_needed,
+            final_percentage=sub_new_percentage,
             remaining_redistributed=[
-                SubstitutionPlanIngredient(**ing) for ing in redistributed
-                if not ing["is_new"] and ing["name"] != sub.substitute_ingredient
+                SubstitutionPlanIngredient(**ing) for ing in remaining_redistributed
             ],
             full_ingredients=full_ingredients,
             has_conflict=len(conflict_details) > 0,

@@ -782,6 +782,7 @@ export interface SubstitutionPlan {
   fitness_score: number;
   suggested_ratio: number;
   new_percentage: number;
+  final_percentage: number;
   remaining_redistributed: SubstitutionPlanIngredient[];
   full_ingredients: SubstitutionPlanIngredient[];
   has_conflict: boolean;

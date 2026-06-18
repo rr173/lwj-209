@@ -3854,7 +3854,7 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
                       </Space>
                     </div>
                     <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>
-                      建议用量比例: ×{plan.suggested_ratio} → 替代后占比: {plan.new_percentage.toFixed(2)}%
+                      建议用量: ×{plan.suggested_ratio} → 新增 {plan.new_percentage.toFixed(2)}%, 最终占比: <Text strong>{plan.final_percentage.toFixed(2)}%</Text>
                     </div>
                     <div style={{ marginBottom: 8 }}>
                       <Space size={4} wrap>

@@ -1090,6 +1090,7 @@ class SubstitutionPlan(BaseModel):
     fitness_score: float
     suggested_ratio: float
     new_percentage: float
+    final_percentage: float
     remaining_redistributed: list[SubstitutionPlanIngredient]
     full_ingredients: list[SubstitutionPlanIngredient]
     has_conflict: bool
