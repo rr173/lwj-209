@@ -55,6 +55,10 @@ import type {
   IngredientSubstitution,
   IngredientSubstitutionCreate,
   SubstitutionPlanListResponse,
+  CostBudget,
+  CostBudgetCreate,
+  BudgetAlert,
+  BudgetMonitoringResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -348,6 +352,32 @@ export const api = {
       version_id: versionId,
       ingredient_name: ingredientName
     }).then(r => r.data),
+
+  createBudget: (data: CostBudgetCreate): Promise<CostBudget> =>
+    axios.post(`${API_BASE}/budgets`, data).then(r => r.data),
+
+  getActiveBudget: (productLineId: number): Promise<CostBudget | null> =>
+    axios.get(`${API_BASE}/budgets/product-line/${productLineId}/active`).then(r => r.data),
+
+  getBudgetHistory: (productLineId: number): Promise<CostBudget[]> =>
+    axios.get(`${API_BASE}/budgets/product-line/${productLineId}/history`).then(r => r.data),
+
+  getBudgetMonitoring: (productLineId: number): Promise<BudgetMonitoringResponse> =>
+    axios.get(`${API_BASE}/budgets/product-line/${productLineId}/monitoring`).then(r => r.data),
+
+  getPendingAlerts: (productLineId: number): Promise<BudgetAlert[]> =>
+    axios.get(`${API_BASE}/budgets/product-line/${productLineId}/alerts/pending`).then(r => r.data),
+
+  getAllAlerts: (productLineId: number, status?: string): Promise<BudgetAlert[]> =>
+    axios.get(`${API_BASE}/budgets/product-line/${productLineId}/alerts`, {
+      params: status ? { status } : {}
+    }).then(r => r.data),
+
+  handleAlert: (alertId: number, data: { handled_by: string; handle_remark?: string | null }): Promise<BudgetAlert> =>
+    axios.post(`${API_BASE}/budgets/alerts/${alertId}/handle`, data).then(r => r.data),
+
+  getAlert: (alertId: number): Promise<BudgetAlert> =>
+    axios.get(`${API_BASE}/budgets/alerts/${alertId}`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {
@@ -482,5 +512,45 @@ export function getExperimentStatusTagColor(status: string): string {
     case 'ongoing': return 'processing';
     case 'completed': return 'success';
     default: return 'default';
+  }
+}
+
+export function getBudgetStatusColor(status: string | null): string {
+  if (status === null) return '#bfbfbf';
+  switch (status) {
+    case 'normal': return '#52c41a';
+    case 'warning': return '#faad14';
+    case 'over': return '#f5222d';
+    case 'unknown': return '#bfbfbf';
+    case 'no_budget': return '#8c8c8c';
+    default: return '#bfbfbf';
+  }
+}
+
+export function getBudgetStatusLabel(status: string | null): string {
+  if (status === null) return '未知';
+  switch (status) {
+    case 'normal': return '预算内';
+    case 'warning': return '接近预警线';
+    case 'over': return '超预算';
+    case 'unknown': return '成本未知';
+    case 'no_budget': return '未设置预算';
+    default: return '未知';
+  }
+}
+
+export function getAlertTypeLabel(alertType: string): string {
+  switch (alertType) {
+    case 'warning': return '预警';
+    case 'over_budget': return '超支';
+    default: return alertType;
+  }
+}
+
+export function getAlertTypeColor(alertType: string): string {
+  switch (alertType) {
+    case 'warning': return '#faad14';
+    case 'over_budget': return '#f5222d';
+    default: return '#8c8c8c';
   }
 }

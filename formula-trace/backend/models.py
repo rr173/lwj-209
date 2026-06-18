@@ -359,3 +359,47 @@ class ComplianceCheckRecord(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
     version = relationship("FormulaVersion")
+
+
+class CostBudget(Base):
+    __tablename__ = "cost_budgets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_line_id: Mapped[int] = mapped_column(Integer, ForeignKey("product_lines.id"), nullable=False, index=True)
+    target_cost_per_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    warning_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    remark: Mapped[str] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    deactivated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    deactivated_by: Mapped[str] = mapped_column(String(200), nullable=True)
+
+    product_line = relationship("ProductLine")
+
+    @property
+    def warning_cost(self) -> float:
+        return self.target_cost_per_kg * self.warning_threshold
+
+
+class BudgetAlert(Base):
+    __tablename__ = "budget_alerts"
+    __table_args__ = (
+        UniqueConstraint("budget_id", "version_id", name="unique_alert_per_budget_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    budget_id: Mapped[int] = mapped_column(Integer, ForeignKey("cost_budgets.id"), nullable=False, index=True)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False, index=True)
+    actual_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    budget_limit: Mapped[float] = mapped_column(Float, nullable=False)
+    exceed_ratio: Mapped[float] = mapped_column(Float, nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    handled_by: Mapped[str] = mapped_column(String(200), nullable=True)
+    handle_remark: Mapped[str] = mapped_column(String(1000), nullable=True)
+    handled_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    budget = relationship("CostBudget")
+    version = relationship("FormulaVersion")

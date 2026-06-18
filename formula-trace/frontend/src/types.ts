@@ -803,3 +803,59 @@ export interface SubstitutionPlanListResponse {
   original_percentage: number;
   plans: SubstitutionPlan[];
 }
+
+export interface CostBudget {
+  id: number;
+  product_line_id: number;
+  target_cost_per_kg: number;
+  warning_threshold: number;
+  is_active: boolean;
+  created_by: string;
+  remark: string | null;
+  created_at: string;
+  deactivated_at: string | null;
+  deactivated_by: string | null;
+  warning_cost: number;
+}
+
+export interface CostBudgetCreate {
+  product_line_id: number;
+  target_cost_per_kg: number;
+  warning_threshold: number;
+  created_by: string;
+  remark?: string | null;
+}
+
+export interface BudgetAlert {
+  id: number;
+  budget_id: number;
+  version_id: number;
+  version_number?: number | null;
+  actual_cost: number;
+  budget_limit: number;
+  exceed_ratio: number;
+  alert_type: 'warning' | 'over_budget';
+  status: 'pending' | 'handled';
+  handled_by: string | null;
+  handle_remark: string | null;
+  handled_at: string | null;
+  created_at: string;
+}
+
+export interface BudgetStatusItem {
+  version_id: number;
+  version_number: number;
+  actual_cost: number | null;
+  budget_limit: number;
+  budget_ratio: number | null;
+  budget_status: 'normal' | 'warning' | 'over' | 'unknown' | 'no_budget';
+  has_unknown_cost: boolean;
+  is_budget_reliable: boolean;
+  missing_quotes: string[];
+}
+
+export interface BudgetMonitoringResponse {
+  product_line_id: number;
+  active_budget: CostBudget | null;
+  items: BudgetStatusItem[];
+}

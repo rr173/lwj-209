@@ -1123,3 +1123,70 @@ class ProductLineLifecycleStats(BaseModel):
     avg_days_from_batch_to_approval: Optional[float]
     avg_version_survival_rounds: Optional[float]
     overdue_milestone_count: int
+
+
+class CostBudgetCreate(BaseModel):
+    product_line_id: int
+    target_cost_per_kg: float = Field(..., gt=0)
+    warning_threshold: float = Field(0.8, gt=0, lt=1)
+    created_by: str = Field(..., min_length=1, max_length=200)
+    remark: Optional[str] = Field(None, max_length=1000)
+
+
+class CostBudgetResponse(BaseModel):
+    id: int
+    product_line_id: int
+    target_cost_per_kg: float
+    warning_threshold: float
+    is_active: bool
+    created_by: str
+    remark: Optional[str]
+    created_at: datetime
+    deactivated_at: Optional[datetime]
+    deactivated_by: Optional[str]
+    warning_cost: float
+
+    class Config:
+        from_attributes = True
+
+
+class BudgetAlertHandleRequest(BaseModel):
+    handled_by: str = Field(..., min_length=1, max_length=200)
+    handle_remark: Optional[str] = Field(None, max_length=1000)
+
+
+class BudgetAlertResponse(BaseModel):
+    id: int
+    budget_id: int
+    version_id: int
+    version_number: Optional[int] = None
+    actual_cost: float
+    budget_limit: float
+    exceed_ratio: float
+    alert_type: str
+    status: str
+    handled_by: Optional[str]
+    handle_remark: Optional[str]
+    handled_at: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BudgetStatusItem(BaseModel):
+    version_id: int
+    version_number: int
+    actual_cost: float | None
+    budget_limit: float
+    budget_ratio: float | None
+    budget_status: str
+    has_unknown_cost: bool
+    is_budget_reliable: bool
+    missing_quotes: list[str]
+
+
+class BudgetMonitoringResponse(BaseModel):
+    product_line_id: int
+    active_budget: CostBudgetResponse | None
+    items: list[BudgetStatusItem]

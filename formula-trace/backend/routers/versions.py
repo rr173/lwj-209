@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from database import get_db
-from models import FormulaVersion, ProductLine, ExclusionGroup, Batch, SupplierQuote, Regulation, CompatibilityRule
+from models import FormulaVersion, ProductLine, ExclusionGroup, Batch, SupplierQuote, Regulation, CompatibilityRule, CostBudget, BudgetAlert
 from schemas import (
     FormulaVersionCreate, FormulaVersionResponse, VersionTreeNode, CompareResponse, CompareDiffItem,
     IngredientItem, ImpactAnalysisRequest, ImpactAnalysisResponse,
@@ -12,7 +12,8 @@ from schemas import (
     ExclusionConflictItem
 )
 from utils import compute_batch_scores
-from datetime import date
+from datetime import date, datetime
+from routers.costs import get_best_price_for_ingredient
 
 router = APIRouter(prefix="/api/versions", tags=["versions"])
 
@@ -132,6 +133,54 @@ async def create_version(data: FormulaVersionCreate, db: AsyncSession = Depends(
     db.add(version)
     await db.commit()
     await db.refresh(version)
+
+    budget_result = await db.execute(
+        select(CostBudget).where(
+            CostBudget.product_line_id == data.product_line_id,
+            CostBudget.is_active == True
+        )
+    )
+    active_budget = budget_result.scalar_one_or_none()
+    if active_budget:
+        total_cost = 0.0
+        has_unknown = False
+        for ing in version.ingredients:
+            best_quote = await get_best_price_for_ingredient(db, ing["name"])
+            if best_quote is None:
+                has_unknown = True
+                break
+            cost = (ing["percentage"] / 100.0) * best_quote.unit_price
+            total_cost += cost
+
+        if not has_unknown:
+            total_cost = round(total_cost, 4)
+            existing_alert = await db.execute(
+                select(BudgetAlert).where(
+                    BudgetAlert.budget_id == active_budget.id,
+                    BudgetAlert.version_id == version.id
+                )
+            )
+            if not existing_alert.scalar_one_or_none():
+                exceed_ratio = total_cost / active_budget.target_cost_per_kg
+                if total_cost > active_budget.target_cost_per_kg:
+                    alert_type = "over_budget"
+                elif total_cost >= active_budget.warning_cost:
+                    alert_type = "warning"
+                else:
+                    alert_type = None
+
+                if alert_type:
+                    alert = BudgetAlert(
+                        budget_id=active_budget.id,
+                        version_id=version.id,
+                        actual_cost=total_cost,
+                        budget_limit=active_budget.target_cost_per_kg,
+                        exceed_ratio=exceed_ratio,
+                        alert_type=alert_type,
+                        status="pending"
+                    )
+                    db.add(alert)
+                    await db.commit()
 
     return FormulaVersionResponse(
         id=version.id,
