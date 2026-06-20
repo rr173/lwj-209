@@ -4,7 +4,6 @@ import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineCha
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate, SubstitutionPlanListResponse, SubstitutionPlan, SubstitutionPlanIngredient, SustainabilityScoreResponse, SustainabilityCompareResponse } from '../types';
 import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor, getSustainabilityColor, getSustainabilityLabel, getSourceCategoryColor, getSourceCategoryLabel, collectVersionIds } from '../api';
-import ProcessExecutionPanel from './ProcessExecutionPanel';
 
 const { Title, Text } = Typography;
 
@@ -847,7 +846,23 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       title: '批次号',
       dataIndex: 'batch_number',
       key: 'batch_number',
-      render: (v: string) => <code style={{ background: '#f5f7fa', padding: '2px 6px', borderRadius: 4 }}>{v}</code>
+      render: (v: string, record: Batch) => (
+        <a
+          onClick={() => window.open(`/batches/${record.id}`, '_blank')}
+          style={{
+            background: '#f5f7fa',
+            padding: '2px 8px',
+            borderRadius: 4,
+            fontFamily: 'monospace',
+            cursor: 'pointer',
+            color: '#1890ff',
+            textDecoration: 'none',
+            fontWeight: 500
+          }}
+        >
+          {v}
+        </a>
+      )
     },
     {
       title: '生产日期',
@@ -912,9 +927,18 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     {
       title: '操作',
       key: 'actions',
-      width: 180,
+      width: 260,
       render: (_: any, record: Batch) => (
-        <Space>
+        <Space wrap>
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            icon={<ThunderboltOutlined />}
+            onClick={() => window.open(`/batches/${record.id}`, '_blank')}
+          >
+            工艺
+          </Button>
           <Button size="small" icon={<EyeOutlined />} onClick={() => handleTrace(record)}>追溯</Button>
           {!(record.skin_feel_score !== null && record.stability_score !== null && record.cost_per_kg !== null) && (
             <Button
@@ -3492,17 +3516,6 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'sustainability',
               label: <span><EnvironmentOutlined /> 可持续性</span>,
               children: renderSustainabilityTab()
-            },
-            {
-              key: 'process-execution',
-              label: <span><ThunderboltOutlined /> 工艺执行</span>,
-              children: (
-                <ProcessExecutionPanel
-                  version={version}
-                  batches={batches}
-                  allBatches={allBatches}
-                />
-              )
             }
           ]}
         />

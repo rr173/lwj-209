@@ -88,6 +88,9 @@ export const api = {
   getVersionBatches: (productLineId: number): Promise<Batch[]> =>
     axios.get(`${API_BASE}/batches/product-line/${productLineId}`).then(r => r.data),
 
+  getBatch: (batchId: number): Promise<Batch> =>
+    axios.get(`${API_BASE}/batches/${batchId}`).then(r => r.data),
+
   getBatchByNumber: (batchNumber: string): Promise<Batch> =>
     axios.get(`${API_BASE}/batches/by-number/${batchNumber}`).then(r => r.data),
 

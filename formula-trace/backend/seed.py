@@ -712,7 +712,7 @@ async def seed_database():
                 consistency_score=89.2,
                 total_deviation_count=0,
                 started_at=datetime(2025, 6, 10, 9, 0, 0),
-                completed_at=datetime(2025, 6, 10, 11, 10, 0),
+                completed_at=datetime(2025, 6, 10, 11, 55, 0),
                 interrupted_at=datetime(2025, 6, 10, 9, 35, 0),
                 interruption_reason="车间临时停电，等待供电恢复",
                 resumed_at=datetime(2025, 6, 10, 10, 15, 0),

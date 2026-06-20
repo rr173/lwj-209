@@ -83,6 +83,7 @@ class BatchCreate(BaseModel):
     version_id: int
     production_date: date
     production_amount: float = Field(..., gt=0)
+    operator: str | None = None
 
 
 class BatchTestResult(BaseModel):

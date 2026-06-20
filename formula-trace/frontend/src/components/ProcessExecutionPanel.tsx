@@ -28,6 +28,8 @@ interface Props {
   version: FormulaVersion;
   batches: Batch[];
   allBatches: Batch[];
+  preselectedBatchId?: number | null;
+  hideBatchSelector?: boolean;
 }
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -81,8 +83,10 @@ function getParameterLabel(p: string): string {
   }
 }
 
-export default function ProcessExecutionPanel({ version, batches, allBatches }: Props) {
-  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+export default function ProcessExecutionPanel({
+  version, batches, allBatches, preselectedBatchId = null, hideBatchSelector = false
+}: Props) {
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(preselectedBatchId);
   const [compareBatchId, setCompareBatchId] = useState<number | null>(null);
   const [execution, setExecution] = useState<BatchProcessExecution | null>(null);
   const [timeline, setTimeline] = useState<ExecutionTimelineResponse | null>(null);
@@ -172,10 +176,18 @@ export default function ProcessExecutionPanel({ version, batches, allBatches }: 
   }, [selectedBatchId, compareBatchId, loadCompare]);
 
   useEffect(() => {
-    if (versionBatches.length > 0) {
+    if (versionBatches.length === 0) return;
+    const hasPre = preselectedBatchId && versionBatches.some(b => b.id === preselectedBatchId);
+    if (hasPre) {
+      setSelectedBatchId(preselectedBatchId);
+    } else if (!selectedBatchId) {
       setSelectedBatchId(versionBatches[0].id);
+    } else if (preselectedBatchId === null || preselectedBatchId === undefined) {
+      if (!versionBatches.some(b => b.id === selectedBatchId)) {
+        setSelectedBatchId(versionBatches[0].id);
+      }
     }
-  }, [versionBatches]);
+  }, [versionBatches, preselectedBatchId]);
 
   const progressInfo = useMemo(() => {
     if (!execution) return { percent: 0, completed: 0, total: 0 };
@@ -521,40 +533,41 @@ export default function ProcessExecutionPanel({ version, batches, allBatches }: 
   return (
     <div>
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={8}>
-          <Card size="small" title={<Space><FileDoneOutlined />批次选择</Space>}>
-            <Form.Item label="选择批次" style={{ marginBottom: 12 }}>
-              <Select
-                style={{ width: '100%' }}
-                placeholder="请选择要查看的批次"
-                value={selectedBatchId}
-                onChange={setSelectedBatchId}
-                optionFilterProp="label"
-              >
-                {versionBatches.length === 0 ? (
-                  <Select.Option value={null} disabled>该版本暂无批次</Select.Option>
-                ) : versionBatches.map(b => (
-                  <Select.Option key={b.id} value={b.id} label={b.batch_number}>
-                    <Space>
-                      <Text>{b.batch_number}</Text>
-                      <Tag color="blue">{b.production_date.toString()}</Tag>
-                      {b.overall_score && <Tag color="green">综合{b.overall_score.toFixed(1)}</Tag>}
-                    </Space>
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
+        {!hideBatchSelector && (
+          <Col xs={24} lg={8}>
+            <Card size="small" title={<Space><FileDoneOutlined />批次选择</Space>}>
+              <Form.Item label="选择批次" style={{ marginBottom: 12 }}>
+                <Select
+                  style={{ width: '100%' }}
+                  placeholder="请选择要查看的批次"
+                  value={selectedBatchId}
+                  onChange={setSelectedBatchId}
+                  optionFilterProp="label"
+                >
+                  {versionBatches.length === 0 ? (
+                    <Select.Option value={null} disabled>该版本暂无批次</Select.Option>
+                  ) : versionBatches.map(b => (
+                    <Select.Option key={b.id} value={b.id} label={b.batch_number}>
+                      <Space>
+                        <Text>{b.batch_number}</Text>
+                        <Tag color="blue">{b.production_date.toString()}</Tag>
+                        {b.overall_score && <Tag color="green">综合{b.overall_score.toFixed(1)}</Tag>}
+                      </Space>
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
 
-            {execution && (
-              <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                <Descriptions size="small" column={1} bordered>
-                  <Descriptions.Item label="工艺卡">
-                    <Space>
-                      <Text strong>{execution.process_card_name}</Text>
-                      <Tag color="blue">{execution.process_card_style}</Tag>
-                    </Space>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="操作员">{execution.operator}</Descriptions.Item>
+              {execution && (
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <Descriptions size="small" column={1} bordered>
+                    <Descriptions.Item label="工艺卡">
+                      <Space>
+                        <Text strong>{execution.process_card_name}</Text>
+                        <Tag color="blue">{execution.process_card_style}</Tag>
+                      </Space>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="操作员">{execution.operator}</Descriptions.Item>
                   <Descriptions.Item label="状态">
                     <Tag color={getStatusColor(execution.status)}>{getStatusLabel(execution.status)}</Tag>
                     {execution.was_interrupted && <Tag color="orange" icon={<PauseCircleOutlined />}>有中断记录</Tag>}
@@ -583,35 +596,56 @@ export default function ProcessExecutionPanel({ version, batches, allBatches }: 
               </Space>
             )}
           </Card>
+        </Col>
+        )}
 
+        <Col xs={24} lg={hideBatchSelector ? 24 : 16}>
           <Card
             size="small"
-            title={<Space><SwapOutlined />批次对比</Space>}
-            style={{ marginTop: 16 }}
+            style={{ marginBottom: 16 }}
+            title={
+              <Space wrap>
+                <SwapOutlined />
+                <Text strong>选择对比批次</Text>
+              </Space>
+            }
           >
-            <Select
-              style={{ width: '100%' }}
-              placeholder="选择对比批次（可选）"
-              value={compareBatchId}
-              onChange={setCompareBatchId}
-              allowClear
-              optionFilterProp="label"
-            >
-              {allBatches
-                .filter(b => b.id !== selectedBatchId)
-                .map(b => (
-                  <Select.Option key={b.id} value={b.id} label={b.batch_number}>
-                    <Space>
-                      <Text>{b.batch_number}</Text>
-                      <Tag color="blue">{b.production_date.toString()}</Tag>
-                    </Space>
-                  </Select.Option>
-                ))}
-            </Select>
+            <Row gutter={[16, 8]}>
+              <Col xs={24} md={12}>
+                <Space size={8} style={{ width: '100%' }}>
+                  <Text type="secondary" style={{ minWidth: 80 }}>当前批次:</Text>
+                  <Tag color="geekblue" style={{ fontSize: 13 }}>
+                    {execution?.batch_number || selectedBatchId || '-'}
+                  </Tag>
+                </Space>
+              </Col>
+              <Col xs={24} md={12}>
+                <Space size={8} style={{ width: '100%' }}>
+                  <Text type="secondary" style={{ minWidth: 80 }}>对比批次:</Text>
+                  <Select
+                    style={{ flex: 1, minWidth: 200 }}
+                    placeholder="选择对比批次（可选）"
+                    value={compareBatchId}
+                    onChange={setCompareBatchId}
+                    allowClear
+                    optionFilterProp="label"
+                  >
+                    {allBatches
+                      .filter(b => b.id !== selectedBatchId)
+                      .map(b => (
+                        <Select.Option key={b.id} value={b.id} label={b.batch_number}>
+                          <Space>
+                            <Text>{b.batch_number}</Text>
+                            <Tag color="blue">{b.production_date.toString()}</Tag>
+                          </Space>
+                        </Select.Option>
+                      ))}
+                  </Select>
+                </Space>
+              </Col>
+            </Row>
           </Card>
-        </Col>
 
-        <Col xs={24} lg={16}>
           <Card
             size="small"
             title={

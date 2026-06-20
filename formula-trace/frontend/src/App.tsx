@@ -14,6 +14,7 @@ import ReviewDetailPage from './components/ReviewDetailPage';
 import BenchmarkingPage from './components/BenchmarkingPage';
 import ExperimentListPage from './components/ExperimentListPage';
 import ExperimentDetailPage from './components/ExperimentDetailPage';
+import BatchDetail from './components/BatchDetail';
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -836,6 +837,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<FormulaPage />} />
+        <Route path="/batches/:id" element={<BatchDetail />} />
         <Route path="/benchmarking" element={<BenchmarkingPageWithHeader />} />
         <Route path="/experiments" element={<ExperimentPageWithHeader />} />
         <Route path="/experiments/:id" element={<ExperimentDetailPage />} />

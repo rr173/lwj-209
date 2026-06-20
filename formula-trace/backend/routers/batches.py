@@ -3,7 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
 from database import get_db
-from models import Batch, FormulaVersion, ProductLine, IngredientInventory, InventoryTransaction
+from models import (
+    Batch, FormulaVersion, ProductLine, IngredientInventory, InventoryTransaction,
+    ProcessCard, ProcessStep, ProcessExecution, StepExecution
+)
 from schemas import BatchCreate, BatchTestResult, BatchResponse, TracePathResponse, TraceDiff, IngredientItem
 from utils import compute_batch_scores
 
@@ -79,6 +82,54 @@ async def create_batch(data: BatchCreate, db: AsyncSession = Depends(get_db)):
             remark=f"试产批次 {batch_number} 生产消耗",
         )
         db.add(transaction)
+
+    card_result = await db.execute(
+        select(ProcessCard)
+        .where(ProcessCard.version_id == data.version_id)
+        .order_by(ProcessCard.created_at.desc())
+    )
+    process_card = card_result.scalars().first()
+    if process_card:
+        steps_result = await db.execute(
+            select(ProcessStep)
+            .where(ProcessStep.process_card_id == process_card.id)
+            .order_by(ProcessStep.step_order)
+        )
+        steps = steps_result.scalars().all()
+        execution = ProcessExecution(
+            batch_id=batch.id,
+            process_card_id=process_card.id,
+            operator=data.operator or "待指派",
+            status="pending",
+            consistency_score=None,
+            total_deviation_count=0,
+            started_at=None,
+            completed_at=None,
+            was_interrupted=False,
+            created_at=datetime.now()
+        )
+        db.add(execution)
+        await db.flush()
+        for step in steps:
+            db.add(StepExecution(
+                execution_id=execution.id,
+                process_step_id=step.id,
+                step_order=step.step_order,
+                status="pending",
+                actual_temperature=None,
+                actual_duration=None,
+                actual_stirring_speed=None,
+                start_time=None,
+                end_time=None,
+                interrupted_at=None,
+                resumed_at=None,
+                photo_url=None,
+                remark=None,
+                has_deviation=False,
+                deviation_details=None,
+                deviation_deduction=0.0,
+                completed_by=None
+            ))
 
     await db.commit()
     await db.refresh(batch)
@@ -189,15 +240,22 @@ async def get_batch(batch_id: int, db: AsyncSession = Depends(get_db)):
     if not batch:
         raise HTTPException(status_code=404, detail="批次不存在")
 
-    v_result = await db.execute(
-        select(Batch).where(
-            Batch.version_id.in_(
-                select(FormulaVersion.id).where(FormulaVersion.product_line_id == batch.version.product_line_id)
-            ),
-            Batch.skin_feel_score.isnot(None)
-        )
+    pl_result = await db.execute(
+        select(FormulaVersion.product_line_id).where(FormulaVersion.id == batch.version_id)
     )
-    all_batches = v_result.scalars().all()
+    product_line_id = pl_result.scalar_one_or_none()
+
+    all_batches: list[Batch] = []
+    if product_line_id is not None:
+        v_result = await db.execute(
+            select(Batch).where(
+                Batch.version_id.in_(
+                    select(FormulaVersion.id).where(FormulaVersion.product_line_id == product_line_id)
+                ),
+                Batch.skin_feel_score.isnot(None)
+            )
+        )
+        all_batches = v_result.scalars().all()
     score_map, _, _ = compute_batch_scores(all_batches)
     overall = score_map.get(batch.id)
 
@@ -221,15 +279,22 @@ async def get_batch_by_number(batch_number: str, db: AsyncSession = Depends(get_
     if not batch:
         raise HTTPException(status_code=404, detail="批次不存在")
 
-    v_result = await db.execute(
-        select(Batch).where(
-            Batch.version_id.in_(
-                select(FormulaVersion.id).where(FormulaVersion.product_line_id == batch.version.product_line_id)
-            ),
-            Batch.skin_feel_score.isnot(None)
-        )
+    pl_result = await db.execute(
+        select(FormulaVersion.product_line_id).where(FormulaVersion.id == batch.version_id)
     )
-    all_batches = v_result.scalars().all()
+    product_line_id = pl_result.scalar_one_or_none()
+
+    all_batches: list[Batch] = []
+    if product_line_id is not None:
+        v_result = await db.execute(
+            select(Batch).where(
+                Batch.version_id.in_(
+                    select(FormulaVersion.id).where(FormulaVersion.product_line_id == product_line_id)
+                ),
+                Batch.skin_feel_score.isnot(None)
+            )
+        )
+        all_batches = v_result.scalars().all()
     score_map, _, _ = compute_batch_scores(all_batches)
     overall = score_map.get(batch.id)
 
