@@ -77,7 +77,7 @@ async def seed_database():
         await db.flush()
 
         v3_ingredients = [
-            {"name": "去离子水", "percentage": 72.00},
+            {"name": "去离子水", "percentage": 72.50},
             {"name": "甘油", "percentage": 8.00},
             {"name": "丙二醇", "percentage": 5.00},
             {"name": "烟酰胺", "percentage": 4.00},
@@ -85,10 +85,11 @@ async def seed_database():
             {"name": "维生素C糖苷", "percentage": 3.00},
             {"name": "卡波姆", "percentage": 0.20},
             {"name": "三乙醇胺", "percentage": 0.30},
-            {"name": "防腐剂", "percentage": 0.50},
-            {"name": "香精", "percentage": 0.50},
+            {"name": "天然防腐剂", "percentage": 0.50},
+            {"name": "香精", "percentage": 0.00},
             {"name": "熊果苷", "percentage": 2.00},
-            {"name": "泛醇", "percentage": 0.50}
+            {"name": "泛醇", "percentage": 0.50},
+            {"name": "维生素E", "percentage": 1.00}
         ]
         v3 = FormulaVersion(
             product_line_id=pl.id,
@@ -285,6 +286,8 @@ async def seed_database():
             {"ingredient": "水杨酸", "supplier": "默克", "price": 95.0, "moq": 20},
             {"ingredient": "甘草酸二钾", "supplier": "甘草原料", "price": 280.0, "moq": 10},
             {"ingredient": "红没药醇", "supplier": "德之馨", "price": 650.0, "moq": 5},
+            {"ingredient": "天然防腐剂", "supplier": "天然原料", "price": 120.0, "moq": 10},
+            {"ingredient": "维生素E", "supplier": "巴斯夫", "price": 150.0, "moq": 10},
         ]
 
         for q in quotes:
@@ -307,7 +310,9 @@ async def seed_database():
             {"name": "红没药醇", "type": "活性成分"},
             {"name": "泛醇", "type": "活性成分"},
             {"name": "透明质酸钠", "type": "活性成分"},
+            {"name": "维生素E", "type": "活性成分"},
             {"name": "防腐剂", "type": "防腐剂"},
+            {"name": "天然防腐剂", "type": "防腐剂"},
             {"name": "去离子水", "type": "基础原料"},
             {"name": "甘油", "type": "基础原料"},
             {"name": "丙二醇", "type": "基础原料"},
@@ -400,6 +405,8 @@ async def seed_database():
             {"name": "水杨酸", "current": 0.3, "safety": 1.0, "location": "D区-危险品柜"},
             {"name": "甘草酸二钾", "current": 0.2, "safety": 0.5, "location": "C区-活性原料柜"},
             {"name": "红没药醇", "current": 0.1, "safety": 0.3, "location": "C区-活性原料柜"},
+            {"name": "天然防腐剂", "current": 0.2, "safety": 0.3, "location": "C区-活性原料柜"},
+            {"name": "维生素E", "current": 0.3, "safety": 0.5, "location": "C区-活性原料柜"},
         ]
 
         for inv_data in initial_inventories:
@@ -511,18 +518,20 @@ async def seed_database():
                 {"name": "去离子水", "bio": 100, "carbon": 0.01, "source": "天然", "microplastic": False},
                 {"name": "甘油", "bio": 98, "carbon": 0.2, "source": "天然", "microplastic": False},
                 {"name": "透明质酸钠", "bio": 95, "carbon": 0.5, "source": "天然", "microplastic": False},
-                {"name": "熊果苷", "bio": 92, "carbon": 0.4, "source": "天然", "microplastic": False},
+                {"name": "熊果苷", "bio": 95, "carbon": 0.3, "source": "天然", "microplastic": False},
                 {"name": "甘草酸二钾", "bio": 70, "carbon": 2.0, "source": "天然", "microplastic": False},
                 {"name": "红没药醇", "bio": 75, "carbon": 1.8, "source": "天然", "microplastic": False},
-                {"name": "烟酰胺", "bio": 88, "carbon": 1.0, "source": "半合成", "microplastic": False},
+                {"name": "天然防腐剂", "bio": 90, "carbon": 0.5, "source": "天然", "microplastic": False},
+                {"name": "维生素E", "bio": 92, "carbon": 0.4, "source": "天然", "microplastic": False},
+                {"name": "烟酰胺", "bio": 90, "carbon": 0.8, "source": "半合成", "microplastic": False},
                 {"name": "维生素C糖苷", "bio": 75, "carbon": 2.5, "source": "半合成", "microplastic": False},
-                {"name": "泛醇", "bio": 90, "carbon": 0.8, "source": "半合成", "microplastic": False},
-                {"name": "丙二醇", "bio": 40, "carbon": 4.0, "source": "全合成", "microplastic": False},
-                {"name": "卡波姆", "bio": 25, "carbon": 7.0, "source": "全合成", "microplastic": False},
-                {"name": "三乙醇胺", "bio": 20, "carbon": 8.0, "source": "全合成", "microplastic": False},
-                {"name": "水杨酸", "bio": 10, "carbon": 25.0, "source": "全合成", "microplastic": False},
-                {"name": "防腐剂", "bio": 8, "carbon": 15.0, "source": "全合成", "microplastic": True},
-                {"name": "香精", "bio": 5, "carbon": 12.0, "source": "全合成", "microplastic": False},
+                {"name": "泛醇", "bio": 92, "carbon": 0.6, "source": "半合成", "microplastic": False},
+                {"name": "丙二醇", "bio": 35, "carbon": 5.0, "source": "全合成", "microplastic": False},
+                {"name": "卡波姆", "bio": 20, "carbon": 10.0, "source": "全合成", "microplastic": False},
+                {"name": "三乙醇胺", "bio": 15, "carbon": 12.0, "source": "全合成", "microplastic": False},
+                {"name": "水杨酸", "bio": 8, "carbon": 30.0, "source": "全合成", "microplastic": False},
+                {"name": "防腐剂", "bio": 5, "carbon": 20.0, "source": "全合成", "microplastic": True},
+                {"name": "香精", "bio": 3, "carbon": 25.0, "source": "全合成", "microplastic": False},
             ]
             for attr in seed_environmental_attrs:
                 env_attr = IngredientEnvironmentalAttribute(
