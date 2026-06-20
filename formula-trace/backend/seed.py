@@ -6,7 +6,8 @@ from models import (
     IngredientTypeConfig, CompatibilityRule, IngredientInventory,
     InventoryTransaction, Regulation, ApprovalRecord, ReviewMeeting,
     ReviewScore, ReviewDecision, ComplianceCheckRecord, IngredientSubstitution,
-    IngredientEnvironmentalAttribute
+    IngredientEnvironmentalAttribute,
+    ProcessCard, ProcessStep, ProcessExecution, StepExecution
 )
 
 
@@ -542,5 +543,324 @@ async def seed_database():
                     has_microplastic_risk=attr["microplastic"]
                 )
                 db.add(env_attr)
+
+        pc_check = await db.execute(
+            select(ProcessCard).where(ProcessCard.version_id == v2.id)
+        )
+        if not pc_check.scalar_one_or_none():
+            card1 = ProcessCard(
+                version_id=v2.id,
+                name="烟酰胺路线-标准工艺卡",
+                style="standard",
+                description="适用于烟酰胺为主的美白精华，注重活性成分温和添加，避免高温破坏活性",
+                created_by="工艺工程师-赵工",
+                created_at=datetime(2025, 5, 22, 9, 0, 0),
+                updated_at=datetime(2025, 5, 22, 9, 0, 0)
+            )
+            db.add(card1)
+            await db.flush()
+
+            steps_v2 = [
+                {"order": 1, "name": "水相预混", "temp": 60, "dur": 600, "speed": 300, "tt": 3, "dt": 120, "st": 50, "photo": False,
+                 "notes": "将去离子水、甘油、丙二醇加入水相锅，搅拌至完全溶解"},
+                {"order": 2, "name": "增稠剂分散", "temp": 60, "dur": 900, "speed": 600, "tt": 3, "dt": 180, "st": 100, "photo": False,
+                 "notes": "缓慢加入卡波姆，高速分散避免结块"},
+                {"order": 3, "name": "中和调pH", "temp": 55, "dur": 300, "speed": 200, "tt": 3, "dt": 60, "st": 30, "photo": False,
+                 "notes": "加入三乙醇胺中和，pH值控制在5.5-6.5"},
+                {"order": 4, "name": "活性成分添加", "temp": 45, "dur": 600, "speed": 250, "tt": 2, "dt": 120, "st": 50, "photo": True,
+                 "notes": "降温至45℃以下，依次加入烟酰胺、维C糖苷、熊果苷，低温避免活性损失"},
+                {"order": 5, "name": "乳化均质", "temp": 45, "dur": 180, "speed": 1500, "tt": 2, "dt": 30, "st": 200, "photo": False,
+                 "notes": "高速均质，确保粒径均匀"},
+                {"order": 6, "name": "保温熟化", "temp": 40, "dur": 1200, "speed": 80, "tt": 3, "dt": 300, "st": 20, "photo": False,
+                 "notes": "低温保温，促进体系稳定"},
+                {"order": 7, "name": "后添加物加入", "temp": 35, "dur": 300, "speed": 150, "tt": 3, "dt": 60, "st": 30, "photo": True,
+                 "notes": "加入透明质酸钠溶液、防腐剂、香精"},
+                {"order": 8, "name": "冷却出料", "temp": 25, "dur": 600, "speed": 50, "tt": 5, "dt": 120, "st": 20, "photo": False,
+                 "notes": "降温至室温后出料送检"},
+            ]
+            for s in steps_v2:
+                db.add(ProcessStep(
+                    process_card_id=card1.id,
+                    step_order=s["order"],
+                    name=s["name"],
+                    target_temperature=s["temp"],
+                    target_duration=s["dur"],
+                    stirring_speed=s["speed"],
+                    temperature_tolerance=s["tt"],
+                    duration_tolerance=s["dt"],
+                    speed_tolerance=s["st"],
+                    requires_photo=s["photo"],
+                    notes=s["notes"]
+                ))
+
+            card2 = ProcessCard(
+                version_id=v5.id,
+                name="水杨酸路线-高精密工艺卡",
+                style="high_precision",
+                description="适用于水杨酸去角质配方，需精确控制温度和pH，防止水杨酸结晶析出",
+                created_by="工艺工程师-钱工",
+                created_at=datetime(2025, 6, 12, 14, 0, 0),
+                updated_at=datetime(2025, 6, 12, 14, 0, 0)
+            )
+            db.add(card2)
+            await db.flush()
+
+            steps_v5 = [
+                {"order": 1, "name": "水相加热溶解", "temp": 75, "dur": 900, "speed": 200, "tt": 2, "dt": 120, "st": 30, "photo": False,
+                 "notes": "去离子水+甘油+丙二醇加热至75℃，确保完全溶解"},
+                {"order": 2, "name": "水杨酸醇溶", "temp": 50, "dur": 600, "speed": 400, "tt": 2, "dt": 60, "st": 50, "photo": True,
+                 "notes": "水杨酸先用少量丙二醇溶解，再加入体系，必须完全溶解无颗粒"},
+                {"order": 3, "name": "增稠中和", "temp": 70, "dur": 900, "speed": 500, "tt": 2, "dt": 120, "st": 80, "photo": False,
+                 "notes": "加入卡波姆分散，三乙醇胺中和，pH精确控制在3.5-4.0"},
+                {"order": 4, "name": "降温加活性物", "temp": 40, "dur": 900, "speed": 200, "tt": 1.5, "dt": 120, "st": 30, "photo": True,
+                 "notes": "严格40℃以下加维C糖苷，防止高温降活，同时加甘草酸二钾"},
+                {"order": 5, "name": "舒缓成分添加", "temp": 38, "dur": 300, "speed": 150, "tt": 2, "dt": 60, "st": 30, "photo": False,
+                 "notes": "加入红没药醇，必须确保分散均匀"},
+                {"order": 6, "name": "精密均质", "temp": 38, "dur": 240, "speed": 2000, "tt": 1.5, "dt": 30, "st": 200, "photo": False,
+                 "notes": "高转速均质确保水杨酸不会重结晶"},
+                {"order": 7, "name": "低温恒温搅拌", "temp": 32, "dur": 1800, "speed": 60, "tt": 1.5, "dt": 300, "st": 15, "photo": False,
+                 "notes": "长时间低温搅拌观察是否有析晶现象"},
+                {"order": 8, "name": "防腐加香出料", "temp": 28, "dur": 420, "speed": 100, "tt": 2, "dt": 60, "st": 20, "photo": True,
+                 "notes": "加防腐剂香精，检测pH和粒径合格后出料"},
+            ]
+            for s in steps_v5:
+                db.add(ProcessStep(
+                    process_card_id=card2.id,
+                    step_order=s["order"],
+                    name=s["name"],
+                    target_temperature=s["temp"],
+                    target_duration=s["dur"],
+                    stirring_speed=s["speed"],
+                    temperature_tolerance=s["tt"],
+                    duration_tolerance=s["dt"],
+                    speed_tolerance=s["st"],
+                    requires_photo=s["photo"],
+                    notes=s["notes"]
+                ))
+            await db.flush()
+
+            pc1_steps_result = await db.execute(
+                select(ProcessStep).where(ProcessStep.process_card_id == card1.id).order_by(ProcessStep.step_order)
+            )
+            pc1_steps = pc1_steps_result.scalars().all()
+
+            pc2_steps_result = await db.execute(
+                select(ProcessStep).where(ProcessStep.process_card_id == card2.id).order_by(ProcessStep.step_order)
+            )
+            pc2_steps = pc2_steps_result.scalars().all()
+
+            exec1 = ProcessExecution(
+                batch_id=b1.id,
+                process_card_id=card1.id,
+                operator="操作员-小王",
+                status="completed",
+                consistency_score=96.5,
+                total_deviation_count=0,
+                started_at=datetime(2025, 6, 1, 8, 30, 0),
+                completed_at=datetime(2025, 6, 1, 10, 15, 0),
+                was_interrupted=False,
+                created_at=datetime(2025, 6, 1, 8, 0, 0)
+            )
+            db.add(exec1)
+            await db.flush()
+
+            exec1_data = [
+                {"start": datetime(2025,6,1,8,30,0), "end": datetime(2025,6,1,8,40,0),
+                 "temp": 60.5, "dur": 600, "speed": 300, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,1,8,40,0), "end": datetime(2025,6,1,8,55,0),
+                 "temp": 61, "dur": 900, "speed": 620, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,1,8,55,0), "end": datetime(2025,6,1,9,0,0),
+                 "temp": 54, "dur": 300, "speed": 200, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,1,9,0,0), "end": datetime(2025,6,1,9,10,0),
+                 "temp": 44, "dur": 600, "speed": 260, "dev": False, "deduct": 0, "details": None,
+                 "photo": "https://example.com/photos/b1-s4.jpg", "remark": "活性物添加顺序正确"},
+                {"start": datetime(2025,6,1,9,10,0), "end": datetime(2025,6,1,9,13,0),
+                 "temp": 44.5, "dur": 180, "speed": 1480, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,1,9,13,0), "end": datetime(2025,6,1,9,33,0),
+                 "temp": 40, "dur": 1200, "speed": 80, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,1,9,33,0), "end": datetime(2025,6,1,9,38,0),
+                 "temp": 35, "dur": 300, "speed": 150, "dev": False, "deduct": 0, "details": None,
+                 "photo": "https://example.com/photos/b1-s7.jpg", "remark": "透明质酸钠完全溶解"},
+                {"start": datetime(2025,6,1,9,38,0), "end": datetime(2025,6,1,10,15,0),
+                 "temp": 25, "dur": 600, "speed": 52, "dev": False, "deduct": 0, "details": None},
+            ]
+            for i, step in enumerate(pc1_steps):
+                d = exec1_data[i]
+                db.add(StepExecution(
+                    execution_id=exec1.id,
+                    process_step_id=step.id,
+                    step_order=step.step_order,
+                    status="completed",
+                    actual_temperature=d["temp"],
+                    actual_duration=d["dur"],
+                    actual_stirring_speed=d["speed"],
+                    start_time=d["start"],
+                    end_time=d["end"],
+                    photo_url=d.get("photo"),
+                    remark=d.get("remark"),
+                    has_deviation=d["dev"],
+                    deviation_details=d["details"],
+                    deviation_deduction=d["deduct"],
+                    completed_by="操作员-小王"
+                ))
+
+            exec2 = ProcessExecution(
+                batch_id=b2.id,
+                process_card_id=card1.id,
+                operator="操作员-小李",
+                status="completed",
+                consistency_score=89.2,
+                total_deviation_count=0,
+                started_at=datetime(2025, 6, 10, 9, 0, 0),
+                completed_at=datetime(2025, 6, 10, 11, 10, 0),
+                interrupted_at=datetime(2025, 6, 10, 9, 35, 0),
+                interruption_reason="车间临时停电，等待供电恢复",
+                resumed_at=datetime(2025, 6, 10, 10, 15, 0),
+                was_interrupted=True,
+                created_at=datetime(2025, 6, 10, 8, 30, 0)
+            )
+            db.add(exec2)
+            await db.flush()
+
+            exec2_data = [
+                {"start": datetime(2025,6,10,9,0,0), "end": datetime(2025,6,10,9,10,0),
+                 "temp": 60, "dur": 600, "speed": 310, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,10,9,10,0), "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None,
+                 "interrupted": datetime(2025,6,10,9,35,0), "resumed": datetime(2025,6,10,10,15,0)},
+                {"start": None, "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None},
+                {"start": None, "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None},
+                {"start": None, "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None},
+                {"start": None, "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None},
+                {"start": None, "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None},
+                {"start": None, "end": None,
+                 "temp": None, "dur": None, "speed": None, "dev": False, "deduct": 0, "details": None},
+            ]
+
+            exec2_full = [
+                {"start": datetime(2025,6,10,9,0,0), "end": datetime(2025,6,10,9,10,0),
+                 "temp": 60, "dur": 600, "speed": 310, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,10,9,10,0), "end": datetime(2025,6,10,10,32,0),
+                 "temp": 59, "dur": 1020, "speed": 580, "dev": False, "deduct": 0, "details": None,
+                 "interrupted": datetime(2025,6,10,9,35,0), "resumed": datetime(2025,6,10,10,15,0),
+                 "remark": "中途停电40分钟，已延长搅拌时间补够"},
+                {"start": datetime(2025,6,10,10,32,0), "end": datetime(2025,6,10,10,37,0),
+                 "temp": 56, "dur": 300, "speed": 190, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,10,10,37,0), "end": datetime(2025,6,10,10,47,0),
+                 "temp": 44, "dur": 600, "speed": 240, "dev": False, "deduct": 0, "details": None,
+                 "photo": "https://example.com/photos/b2-s4.jpg", "remark": "停电后重新测温，合格"},
+                {"start": datetime(2025,6,10,10,47,0), "end": datetime(2025,6,10,10,50,0),
+                 "temp": 44, "dur": 180, "speed": 1500, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,10,10,50,0), "end": datetime(2025,6,10,11,10,0),
+                 "temp": 40, "dur": 1200, "speed": 80, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,10,11,10,0), "end": datetime(2025,6,10,11,15,0),
+                 "temp": 34, "dur": 300, "speed": 150, "dev": False, "deduct": 0, "details": None,
+                 "photo": "https://example.com/photos/b2-s7.jpg"},
+                {"start": datetime(2025,6,10,11,15,0), "end": datetime(2025,6,10,11,55,0),
+                 "temp": 24, "dur": 600, "speed": 50, "dev": False, "deduct": 0, "details": None},
+            ]
+            for i, step in enumerate(pc1_steps):
+                d = exec2_full[i]
+                db.add(StepExecution(
+                    execution_id=exec2.id,
+                    process_step_id=step.id,
+                    step_order=step.step_order,
+                    status="completed",
+                    actual_temperature=d["temp"],
+                    actual_duration=d["dur"],
+                    actual_stirring_speed=d["speed"],
+                    start_time=d["start"],
+                    end_time=d["end"],
+                    interrupted_at=d.get("interrupted"),
+                    resumed_at=d.get("resumed"),
+                    photo_url=d.get("photo"),
+                    remark=d.get("remark"),
+                    has_deviation=d["dev"],
+                    deviation_details=d["details"],
+                    deviation_deduction=d["deduct"],
+                    completed_by="操作员-小李"
+                ))
+
+            exec3 = ProcessExecution(
+                batch_id=b3.id,
+                process_card_id=card2.id,
+                operator="操作员-小张",
+                status="completed",
+                consistency_score=74.8,
+                total_deviation_count=2,
+                started_at=datetime(2025, 6, 15, 8, 0, 0),
+                completed_at=datetime(2025, 6, 15, 10, 30, 0),
+                was_interrupted=False,
+                created_at=datetime(2025, 6, 15, 7, 30, 0)
+            )
+            db.add(exec3)
+            await db.flush()
+
+            dev_temp = [{
+                "parameter": "temperature",
+                "target_value": 50,
+                "actual_value": 56,
+                "tolerance": 2,
+                "deviation": 6,
+                "deviation_percentage": 12.0
+            }]
+            dev_dur = [{
+                "parameter": "duration",
+                "target_value": 240,
+                "actual_value": 180,
+                "tolerance": 30,
+                "deviation": 60,
+                "deviation_percentage": 25.0
+            }]
+
+            exec3_data = [
+                {"start": datetime(2025,6,15,8,0,0), "end": datetime(2025,6,15,8,15,0),
+                 "temp": 76, "dur": 900, "speed": 210, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,15,8,15,0), "end": datetime(2025,6,15,8,25,0),
+                 "temp": 56, "dur": 600, "speed": 400, "dev": True, "deduct": 6.0, "details": dev_temp,
+                 "photo": "https://example.com/photos/b3-s2.jpg",
+                 "remark": "温度偏高，观察到少量颗粒，延长搅拌后溶解"},
+                {"start": datetime(2025,6,15,8,25,0), "end": datetime(2025,6,15,8,40,0),
+                 "temp": 70, "dur": 900, "speed": 520, "dev": False, "deduct": 0, "details": None,
+                 "remark": "pH值3.8，在合格范围"},
+                {"start": datetime(2025,6,15,8,40,0), "end": datetime(2025,6,15,8,55,0),
+                 "temp": 40, "dur": 900, "speed": 200, "dev": False, "deduct": 0, "details": None,
+                 "photo": "https://example.com/photos/b3-s4.jpg", "remark": "温度准确，维C添加顺利"},
+                {"start": datetime(2025,6,15,8,55,0), "end": datetime(2025,6,15,9,0,0),
+                 "temp": 38, "dur": 300, "speed": 150, "dev": False, "deduct": 0, "details": None},
+                {"start": datetime(2025,6,15,9,0,0), "end": datetime(2025,6,15,9,3,0),
+                 "temp": 38, "dur": 180, "speed": 2000, "dev": True, "deduct": 12.5, "details": dev_dur,
+                 "remark": "均质时间不足，担心温度升高提前停止"},
+                {"start": datetime(2025,6,15,9,3,0), "end": datetime(2025,6,15,9,33,0),
+                 "temp": 32, "dur": 1800, "speed": 60, "dev": False, "deduct": 0, "details": None,
+                 "remark": "延长保温补偿均质不足"},
+                {"start": datetime(2025,6,15,9,33,0), "end": datetime(2025,6,15,10,30,0),
+                 "temp": 28, "dur": 420, "speed": 100, "dev": False, "deduct": 0, "details": None,
+                 "photo": "https://example.com/photos/b3-s8.jpg", "remark": "出料检测合格，但粒径略大"},
+            ]
+            for i, step in enumerate(pc2_steps):
+                d = exec3_data[i]
+                db.add(StepExecution(
+                    execution_id=exec3.id,
+                    process_step_id=step.id,
+                    step_order=step.step_order,
+                    status="completed",
+                    actual_temperature=d["temp"],
+                    actual_duration=d["dur"],
+                    actual_stirring_speed=d["speed"],
+                    start_time=d["start"],
+                    end_time=d["end"],
+                    photo_url=d.get("photo"),
+                    remark=d.get("remark"),
+                    has_deviation=d["dev"],
+                    deviation_details=d["details"],
+                    deviation_deduction=d["deduct"],
+                    completed_by="操作员-小张"
+                ))
 
         await db.commit()

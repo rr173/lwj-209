@@ -1302,3 +1302,241 @@ class SustainabilityCompareResponse(BaseModel):
     ingredient_comparisons: list[CompareIngredientContribution]
     positive_impact_ingredients: list[str]
     negative_impact_ingredients: list[str]
+
+
+class ProcessStepBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    target_temperature: Optional[float] = Field(None, ge=0, le=200)
+    target_duration: int = Field(..., gt=0)
+    stirring_speed: Optional[int] = Field(None, ge=0, le=10000)
+    temperature_tolerance: float = Field(2.0, ge=0, le=50)
+    duration_tolerance: int = Field(300, ge=0, le=7200)
+    speed_tolerance: int = Field(50, ge=0, le=2000)
+    requires_photo: bool = False
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
+class ProcessStepCreate(ProcessStepBase):
+    step_order: int = Field(..., ge=1)
+
+
+class ProcessStepUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    target_temperature: Optional[float] = Field(None, ge=0, le=200)
+    target_duration: Optional[int] = Field(None, gt=0)
+    stirring_speed: Optional[int] = Field(None, ge=0, le=10000)
+    temperature_tolerance: Optional[float] = Field(None, ge=0, le=50)
+    duration_tolerance: Optional[int] = Field(None, ge=0, le=7200)
+    speed_tolerance: Optional[int] = Field(None, ge=0, le=2000)
+    requires_photo: Optional[bool] = None
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
+class ProcessStepResponse(ProcessStepBase):
+    id: int
+    process_card_id: int
+    step_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class ProcessCardBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    style: str = Field("standard", pattern="^(standard|high_precision|rapid|custom)$")
+    description: Optional[str] = Field(None, max_length=1000)
+
+
+class ProcessCardCreate(ProcessCardBase):
+    version_id: int
+    created_by: str = Field(..., min_length=1, max_length=200)
+    steps: list[ProcessStepCreate] = Field(..., min_length=1)
+
+
+class ProcessCardUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    style: Optional[str] = Field(None, pattern="^(standard|high_precision|rapid|custom)$")
+    description: Optional[str] = Field(None, max_length=1000)
+    steps: Optional[list[ProcessStepCreate]] = None
+
+
+class ProcessCardResponse(ProcessCardBase):
+    id: int
+    version_id: int
+    version_number: Optional[int] = None
+    created_by: str
+    step_count: int
+    total_duration_minutes: int
+    created_at: datetime
+    updated_at: datetime
+    steps: list[ProcessStepResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ProcessCardListItem(BaseModel):
+    id: int
+    version_id: int
+    version_number: Optional[int] = None
+    name: str
+    style: str
+    description: Optional[str] = None
+    step_count: int
+    total_duration_minutes: int
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DeviationDetail(BaseModel):
+    parameter: str
+    target_value: float | int | None
+    actual_value: float | int | None
+    tolerance: float | int
+    deviation: float | int
+    deviation_percentage: float
+
+
+class StepExecutionResponse(BaseModel):
+    id: int
+    execution_id: int
+    process_step_id: int
+    step_order: int
+    name: Optional[str] = None
+    status: str
+    target_temperature: Optional[float] = None
+    target_duration: Optional[int] = None
+    stirring_speed: Optional[int] = None
+    temperature_tolerance: Optional[float] = None
+    duration_tolerance: Optional[int] = None
+    speed_tolerance: Optional[int] = None
+    actual_temperature: Optional[float] = None
+    actual_duration: Optional[int] = None
+    actual_stirring_speed: Optional[int] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    interrupted_at: Optional[datetime] = None
+    resumed_at: Optional[datetime] = None
+    photo_url: Optional[str] = None
+    remark: Optional[str] = None
+    requires_photo: bool = False
+    notes: Optional[str] = None
+    has_deviation: bool
+    deviation_details: Optional[list[DeviationDetail]] = None
+    deviation_deduction: float
+    completed_by: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProcessExecutionBase(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+
+
+class ProcessExecutionCreate(ProcessExecutionBase):
+    batch_id: int
+    process_card_id: int
+
+
+class StartStepRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+
+
+class CompleteStepRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+    actual_temperature: Optional[float] = Field(None, ge=0, le=200)
+    actual_duration: int = Field(..., gt=0)
+    actual_stirring_speed: Optional[int] = Field(None, ge=0, le=10000)
+    photo_url: Optional[str] = Field(None, max_length=500)
+    remark: Optional[str] = Field(None, max_length=1000)
+
+
+class InterruptExecutionRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class ResumeExecutionRequest(BaseModel):
+    operator: str = Field(..., min_length=1, max_length=200)
+
+
+class ProcessExecutionTimelineEvent(BaseModel):
+    event_type: str
+    timestamp: datetime
+    step_order: Optional[int] = None
+    step_name: Optional[str] = None
+    description: str
+    extra: Optional[dict] = None
+
+
+class ProcessExecutionTimelineResponse(BaseModel):
+    execution_id: int
+    batch_id: int
+    batch_number: str
+    process_card_id: int
+    process_card_name: str
+    status: str
+    consistency_score: Optional[float] = None
+    total_deviation_count: int
+    operator: str
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    was_interrupted: bool
+    interruption_reason: Optional[str] = None
+    interrupted_at: Optional[datetime] = None
+    resumed_at: Optional[datetime] = None
+    step_executions: list[StepExecutionResponse]
+    timeline_events: list[ProcessExecutionTimelineEvent]
+
+
+class BatchProcessExecutionResponse(BaseModel):
+    id: int
+    batch_id: int
+    batch_number: str
+    process_card_id: int
+    process_card_name: str
+    process_card_style: str
+    operator: str
+    status: str
+    consistency_score: Optional[float] = None
+    total_deviation_count: int
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    was_interrupted: bool
+    interruption_reason: Optional[str] = None
+    interrupted_at: Optional[datetime] = None
+    resumed_at: Optional[datetime] = None
+    step_executions: list[StepExecutionResponse] = []
+
+
+class BatchStepDiff(BaseModel):
+    step_order: int
+    step_name: str
+    parameter: str
+    left_value: Optional[float | int] = None
+    right_value: Optional[float | int] = None
+    target_value: Optional[float | int] = None
+    difference: Optional[float | int] = None
+    has_diff: bool
+    diff_level: Optional[str] = None
+
+
+class ProcessCompareResponse(BaseModel):
+    left_batch_id: int
+    left_batch_number: str
+    right_batch_id: int
+    right_batch_number: str
+    left_consistency_score: Optional[float] = None
+    right_consistency_score: Optional[float] = None
+    left_deviation_count: int
+    right_deviation_count: int
+    left_status: str
+    right_status: str
+    step_diffs: list[BatchStepDiff]
+    summary: dict
+    significant_diff_steps: list[int]

@@ -425,3 +425,95 @@ class IngredientEnvironmentalAttribute(Base):
             "全合成": 30
         }
         return score_map.get(self.source_category, 0)
+
+
+class ProcessCard(Base):
+    __tablename__ = "process_cards"
+    __table_args__ = (
+        UniqueConstraint("version_id", "name", name="unique_process_card_per_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("formula_versions.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    style: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
+    description: Mapped[str] = mapped_column(String(1000), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    version = relationship("FormulaVersion")
+    steps = relationship("ProcessStep", back_populates="process_card", cascade="all, delete-orphan", order_by="ProcessStep.step_order")
+    executions = relationship("ProcessExecution", back_populates="process_card", cascade="all, delete-orphan")
+
+
+class ProcessStep(Base):
+    __tablename__ = "process_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    process_card_id: Mapped[int] = mapped_column(Integer, ForeignKey("process_cards.id"), nullable=False, index=True)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    target_temperature: Mapped[float] = mapped_column(Float, nullable=True)
+    target_duration: Mapped[int] = mapped_column(Integer, nullable=False)
+    stirring_speed: Mapped[int] = mapped_column(Integer, nullable=True)
+    temperature_tolerance: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
+    duration_tolerance: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
+    speed_tolerance: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    requires_photo: Mapped[bool] = mapped_column(nullable=False, default=False)
+    notes: Mapped[str] = mapped_column(String(1000), nullable=True)
+
+    process_card = relationship("ProcessCard", back_populates="steps")
+    executions = relationship("StepExecution", back_populates="process_step", cascade="all, delete-orphan")
+
+
+class ProcessExecution(Base):
+    __tablename__ = "process_executions"
+    __table_args__ = (
+        UniqueConstraint("batch_id", name="unique_execution_per_batch"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    batch_id: Mapped[int] = mapped_column(Integer, ForeignKey("batches.id"), nullable=False, index=True)
+    process_card_id: Mapped[int] = mapped_column(Integer, ForeignKey("process_cards.id"), nullable=False)
+    operator: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    consistency_score: Mapped[float] = mapped_column(Float, nullable=True)
+    total_deviation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    interrupted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    interruption_reason: Mapped[str] = mapped_column(String(500), nullable=True)
+    resumed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    was_interrupted: Mapped[bool] = mapped_column(nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    batch = relationship("Batch")
+    process_card = relationship("ProcessCard", back_populates="executions")
+    step_executions = relationship("StepExecution", back_populates="execution", cascade="all, delete-orphan", order_by="StepExecution.step_order")
+
+
+class StepExecution(Base):
+    __tablename__ = "step_executions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    execution_id: Mapped[int] = mapped_column(Integer, ForeignKey("process_executions.id"), nullable=False, index=True)
+    process_step_id: Mapped[int] = mapped_column(Integer, ForeignKey("process_steps.id"), nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    actual_temperature: Mapped[float] = mapped_column(Float, nullable=True)
+    actual_duration: Mapped[int] = mapped_column(Integer, nullable=True)
+    actual_stirring_speed: Mapped[int] = mapped_column(Integer, nullable=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    end_time: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    interrupted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    resumed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    remark: Mapped[str] = mapped_column(String(1000), nullable=True)
+    has_deviation: Mapped[bool] = mapped_column(nullable=False, default=False)
+    deviation_details: Mapped[list] = mapped_column(JSON, nullable=True)
+    deviation_deduction: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    completed_by: Mapped[str] = mapped_column(String(200), nullable=True)
+
+    execution = relationship("ProcessExecution", back_populates="step_executions")
+    process_step = relationship("ProcessStep", back_populates="executions")

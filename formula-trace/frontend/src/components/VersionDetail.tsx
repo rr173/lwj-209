@@ -4,6 +4,7 @@ import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineCha
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate, SubstitutionPlanListResponse, SubstitutionPlan, SubstitutionPlanIngredient, SustainabilityScoreResponse, SustainabilityCompareResponse } from '../types';
 import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor, getSustainabilityColor, getSustainabilityLabel, getSourceCategoryColor, getSourceCategoryLabel, collectVersionIds } from '../api';
+import ProcessExecutionPanel from './ProcessExecutionPanel';
 
 const { Title, Text } = Typography;
 
@@ -3491,6 +3492,17 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'sustainability',
               label: <span><EnvironmentOutlined /> 可持续性</span>,
               children: renderSustainabilityTab()
+            },
+            {
+              key: 'process-execution',
+              label: <span><ThunderboltOutlined /> 工艺执行</span>,
+              children: (
+                <ProcessExecutionPanel
+                  version={version}
+                  batches={batches}
+                  allBatches={allBatches}
+                />
+              )
             }
           ]}
         />

@@ -62,6 +62,15 @@ import type {
   EnvironmentalAttribute,
   SustainabilityScoreResponse,
   SustainabilityCompareResponse,
+  ProcessCard,
+  ProcessCardListItem,
+  ProcessCardCreate,
+  BatchProcessExecution,
+  ExecutionTimelineResponse,
+  StepExecution,
+  CompleteStepRequest,
+  ExecutionCreate,
+  ProcessCompareResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -423,6 +432,48 @@ export const api = {
     axios.get(`${API_BASE}/sustainability/compare`, {
       params: { left_id: leftId, right_id: rightId }
     }).then(r => r.data),
+
+  listProcessCards: (versionId: number): Promise<ProcessCardListItem[]> =>
+    axios.get(`${API_BASE}/process/cards/version/${versionId}`).then(r => r.data),
+
+  getProcessCard: (cardId: number): Promise<ProcessCard> =>
+    axios.get(`${API_BASE}/process/cards/${cardId}`).then(r => r.data),
+
+  createProcessCard: (data: ProcessCardCreate): Promise<ProcessCard> =>
+    axios.post(`${API_BASE}/process/cards`, data).then(r => r.data),
+
+  updateProcessCard: (cardId: number, data: any): Promise<ProcessCard> =>
+    axios.put(`${API_BASE}/process/cards/${cardId}`, data).then(r => r.data),
+
+  deleteProcessCard: (cardId: number): Promise<void> =>
+    axios.delete(`${API_BASE}/process/cards/${cardId}`).then(r => r.data),
+
+  createProcessExecution: (data: ExecutionCreate): Promise<BatchProcessExecution> =>
+    axios.post(`${API_BASE}/process/executions`, data).then(r => r.data),
+
+  getBatchProcessExecution: (batchId: number): Promise<BatchProcessExecution> =>
+    axios.get(`${API_BASE}/process/executions/batch/${batchId}`).then(r => r.data),
+
+  getExecutionTimeline: (batchId: number): Promise<ExecutionTimelineResponse> =>
+    axios.get(`${API_BASE}/process/executions/batch/${batchId}/timeline`).then(r => r.data),
+
+  startStep: (executionId: number, stepId: number, operator: string): Promise<StepExecution> =>
+    axios.post(`${API_BASE}/process/executions/${executionId}/steps/${stepId}/start`, { operator }).then(r => r.data),
+
+  completeStep: (executionId: number, stepId: number, data: CompleteStepRequest): Promise<StepExecution> =>
+    axios.post(`${API_BASE}/process/executions/${executionId}/steps/${stepId}/complete`, data).then(r => r.data),
+
+  interruptExecution: (executionId: number, operator: string, reason: string): Promise<BatchProcessExecution> =>
+    axios.post(`${API_BASE}/process/executions/${executionId}/interrupt`, { operator, reason }).then(r => r.data),
+
+  resumeExecution: (executionId: number, operator: string): Promise<BatchProcessExecution> =>
+    axios.post(`${API_BASE}/process/executions/${executionId}/resume`, { operator }).then(r => r.data),
+
+  compareBatchProcesses: (leftBatchId: number, rightBatchId: number): Promise<ProcessCompareResponse> =>
+    axios.get(`${API_BASE}/process/compare/batches/${leftBatchId}/${rightBatchId}`).then(r => r.data),
+
+  listExecutionsByProductLine: (productLineId: number): Promise<BatchProcessExecution[]> =>
+    axios.get(`${API_BASE}/process/executions/product-line/${productLineId}`).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {

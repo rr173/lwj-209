@@ -934,3 +934,214 @@ export interface SustainabilityCompareResponse {
   positive_impact_ingredients: string[];
   negative_impact_ingredients: string[];
 }
+
+export type ProcessCardStyle = 'standard' | 'high_precision' | 'rapid' | 'custom';
+
+export interface ProcessStep {
+  id: number;
+  process_card_id: number;
+  step_order: number;
+  name: string;
+  target_temperature: number | null;
+  target_duration: number;
+  stirring_speed: number | null;
+  temperature_tolerance: number;
+  duration_tolerance: number;
+  speed_tolerance: number;
+  requires_photo: boolean;
+  notes: string | null;
+}
+
+export interface ProcessCard {
+  id: number;
+  version_id: number;
+  version_number: number | null;
+  name: string;
+  style: ProcessCardStyle;
+  description: string | null;
+  created_by: string;
+  step_count: number;
+  total_duration_minutes: number;
+  created_at: string;
+  updated_at: string;
+  steps: ProcessStep[];
+}
+
+export interface ProcessCardListItem {
+  id: number;
+  version_id: number;
+  version_number: number | null;
+  name: string;
+  style: ProcessCardStyle;
+  description: string | null;
+  step_count: number;
+  total_duration_minutes: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StepExecutionStatus = 'pending' | 'in_progress' | 'completed' | 'interrupted';
+export type ExecutionStatus = 'pending' | 'in_progress' | 'completed' | 'interrupted';
+
+export interface DeviationDetail {
+  parameter: string;
+  target_value: number | null;
+  actual_value: number | null;
+  tolerance: number;
+  deviation: number;
+  deviation_percentage: number;
+}
+
+export interface StepExecution {
+  id: number;
+  execution_id: number;
+  process_step_id: number;
+  step_order: number;
+  name: string | null;
+  status: StepExecutionStatus;
+  target_temperature: number | null;
+  target_duration: number | null;
+  stirring_speed: number | null;
+  temperature_tolerance: number | null;
+  duration_tolerance: number | null;
+  speed_tolerance: number | null;
+  actual_temperature: number | null;
+  actual_duration: number | null;
+  actual_stirring_speed: number | null;
+  start_time: string | null;
+  end_time: string | null;
+  interrupted_at: string | null;
+  resumed_at: string | null;
+  photo_url: string | null;
+  remark: string | null;
+  requires_photo: boolean;
+  notes: string | null;
+  has_deviation: boolean;
+  deviation_details: DeviationDetail[] | null;
+  deviation_deduction: number;
+  completed_by: string | null;
+}
+
+export interface BatchProcessExecution {
+  id: number;
+  batch_id: number;
+  batch_number: string;
+  process_card_id: number;
+  process_card_name: string;
+  process_card_style: ProcessCardStyle;
+  operator: string;
+  status: ExecutionStatus;
+  consistency_score: number | null;
+  total_deviation_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  was_interrupted: boolean;
+  interruption_reason: string | null;
+  interrupted_at: string | null;
+  resumed_at: string | null;
+  step_executions: StepExecution[];
+}
+
+export interface TimelineEvent {
+  event_type: string;
+  timestamp: string;
+  step_order: number | null;
+  step_name: string | null;
+  description: string;
+  extra: Record<string, any> | null;
+}
+
+export interface ExecutionTimelineResponse {
+  execution_id: number;
+  batch_id: number;
+  batch_number: string;
+  process_card_id: number;
+  process_card_name: string;
+  status: ExecutionStatus;
+  consistency_score: number | null;
+  total_deviation_count: number;
+  operator: string;
+  started_at: string | null;
+  completed_at: string | null;
+  was_interrupted: boolean;
+  interruption_reason: string | null;
+  interrupted_at: string | null;
+  resumed_at: string | null;
+  step_executions: StepExecution[];
+  timeline_events: TimelineEvent[];
+}
+
+export interface BatchStepDiff {
+  step_order: number;
+  step_name: string;
+  parameter: string;
+  left_value: number | null;
+  right_value: number | null;
+  target_value: number | null;
+  difference: number | null;
+  has_diff: boolean;
+  diff_level: 'minor' | 'significant' | null;
+}
+
+export interface ProcessCompareResponse {
+  left_batch_id: number;
+  left_batch_number: string;
+  right_batch_id: number;
+  right_batch_number: string;
+  left_consistency_score: number | null;
+  right_consistency_score: number | null;
+  left_deviation_count: number;
+  right_deviation_count: number;
+  left_status: ExecutionStatus;
+  right_status: ExecutionStatus;
+  step_diffs: BatchStepDiff[];
+  summary: {
+    total_steps_left: number;
+    total_steps_right: number;
+    total_parameters_compared: number;
+    total_parameters_different: number;
+    difference_rate_percentage: number;
+    temperature_differences: number;
+    duration_differences: number;
+    speed_differences: number;
+    consistency_score_diff: number;
+    deviation_count_diff: number;
+  };
+  significant_diff_steps: number[];
+}
+
+export interface ProcessCardCreate {
+  version_id: number;
+  name: string;
+  style: ProcessCardStyle;
+  description?: string;
+  created_by: string;
+  steps: Array<{
+    step_order: number;
+    name: string;
+    target_temperature?: number | null;
+    target_duration: number;
+    stirring_speed?: number | null;
+    temperature_tolerance?: number;
+    duration_tolerance?: number;
+    speed_tolerance?: number;
+    requires_photo?: boolean;
+    notes?: string;
+  }>;
+}
+
+export interface ExecutionCreate {
+  batch_id: number;
+  process_card_id: number;
+  operator: string;
+}
+
+export interface CompleteStepRequest {
+  operator: string;
+  actual_temperature?: number | null;
+  actual_duration: number;
+  actual_stirring_speed?: number | null;
+  photo_url?: string;
+  remark?: string;
+}
