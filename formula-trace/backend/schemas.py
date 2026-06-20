@@ -113,6 +113,7 @@ class VersionTreeNode(BaseModel):
     batch_count: int
     best_batch_score: Optional[float]
     approval_status: str = "draft"
+    sustainability_score: Optional[float] = None
     children: list["VersionTreeNode"] = []
 
 
@@ -1190,3 +1191,114 @@ class BudgetMonitoringResponse(BaseModel):
     product_line_id: int
     active_budget: CostBudgetResponse | None
     items: list[BudgetStatusItem]
+
+
+class EnvironmentalAttributeCreate(BaseModel):
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+    biodegradability_score: float = Field(..., ge=0, le=100)
+    carbon_footprint: float = Field(..., ge=0)
+    source_category: str = Field(..., pattern="^(天然|半合成|全合成)$")
+    has_microplastic_risk: bool = False
+
+
+class EnvironmentalAttributeUpdate(BaseModel):
+    biodegradability_score: Optional[float] = Field(None, ge=0, le=100)
+    carbon_footprint: Optional[float] = Field(None, ge=0)
+    source_category: Optional[str] = Field(None, pattern="^(天然|半合成|全合成)$")
+    has_microplastic_risk: Optional[bool] = None
+
+
+class EnvironmentalAttributeResponse(BaseModel):
+    id: int
+    ingredient_name: str
+    biodegradability_score: float
+    carbon_footprint: float
+    source_category: str
+    has_microplastic_risk: bool
+    source_score: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EnvironmentalAttributeBatchItem(BaseModel):
+    ingredient_name: str = Field(..., min_length=1, max_length=200)
+    biodegradability_score: float = Field(..., ge=0, le=100)
+    carbon_footprint: float = Field(..., ge=0)
+    source_category: str = Field(..., pattern="^(天然|半合成|全合成)$")
+    has_microplastic_risk: bool = False
+
+
+class EnvironmentalAttributeBatchRequest(BaseModel):
+    items: list[EnvironmentalAttributeBatchItem] = Field(..., max_length=50)
+
+
+class EnvironmentalAttributeBatchResponse(BaseModel):
+    success_count: int
+    updated_count: int
+    created_count: int
+    total_count: int
+
+
+class IngredientEnvironmentalContribution(BaseModel):
+    ingredient_name: str
+    percentage: float
+    has_data: bool
+    biodegradability_score: Optional[float] = None
+    carbon_footprint: Optional[float] = None
+    source_category: Optional[str] = None
+    has_microplastic_risk: Optional[bool] = None
+    weighted_biodegradability: Optional[float] = None
+    weighted_carbon: Optional[float] = None
+    weighted_source: Optional[float] = None
+
+
+class SustainabilityScoreResponse(BaseModel):
+    version_id: int
+    version_number: int
+    total_score: float
+    biodegradability_score: float
+    carbon_footprint_score: float
+    source_score: float
+    microplastic_penalty: float
+    is_reliable: bool
+    missing_ingredients: list[str]
+    missing_percentage: float
+    contributions: list[IngredientEnvironmentalContribution]
+    has_microplastic_ingredient: bool
+
+
+class CompareSustainabilityDimension(BaseModel):
+    left_value: float
+    right_value: float
+    delta: float
+    delta_percentage: float
+
+
+class CompareIngredientContribution(BaseModel):
+    ingredient_name: str
+    left_percentage: Optional[float] = None
+    right_percentage: Optional[float] = None
+    change_type: str
+    left_environmental_score: Optional[float] = None
+    right_environmental_score: Optional[float] = None
+    environmental_impact_delta: Optional[float] = None
+    impact_label: str
+
+
+class SustainabilityCompareResponse(BaseModel):
+    left_version_id: int
+    left_version_number: int
+    right_version_id: int
+    right_version_number: int
+    total_score: CompareSustainabilityDimension
+    biodegradability_score: CompareSustainabilityDimension
+    carbon_footprint_score: CompareSustainabilityDimension
+    source_score: CompareSustainabilityDimension
+    left_reliable: bool
+    right_reliable: bool
+    ingredient_comparisons: list[CompareIngredientContribution]
+    positive_impact_ingredients: list[str]
+    negative_impact_ingredients: list[str]

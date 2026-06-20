@@ -14,6 +14,7 @@ from schemas import (
 from utils import compute_batch_scores
 from datetime import date, datetime
 from routers.costs import get_best_price_for_ingredient
+from routers.sustainability import calculate_sustainability_score
 
 router = APIRouter(prefix="/api/versions", tags=["versions"])
 
@@ -275,6 +276,7 @@ async def get_version_tree(product_line_id: int, db: AsyncSession = Depends(get_
     version_map = {}
     for v in versions:
         info = batch_info[v.id]
+        sustainability_data = await calculate_sustainability_score(v, db)
         version_map[v.id] = VersionTreeNode(
             id=v.id,
             version_number=v.version_number,
@@ -282,6 +284,7 @@ async def get_version_tree(product_line_id: int, db: AsyncSession = Depends(get_
             batch_count=info["count"],
             best_batch_score=info["best_score"],
             approval_status=v.approval_status,
+            sustainability_score=sustainability_data.total_score if sustainability_data.is_reliable else None,
             children=[]
         )
 

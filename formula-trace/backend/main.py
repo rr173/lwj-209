@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import engine, Base
-from routers import product_lines, versions, batches, exclusion_groups, analytics, costs, stability, approvals, inventory, reviews, regulations, benchmarking, experiments, lifecycle, substitutions, budgets
+from routers import product_lines, versions, batches, exclusion_groups, analytics, costs, stability, approvals, inventory, reviews, regulations, benchmarking, experiments, lifecycle, substitutions, budgets, sustainability
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.include_router(experiments.router)
 app.include_router(lifecycle.router)
 app.include_router(substitutions.router)
 app.include_router(budgets.router)
+app.include_router(sustainability.router)
 
 
 @app.get("/api/health")

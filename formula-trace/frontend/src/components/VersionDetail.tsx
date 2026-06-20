@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Table, Tag, Space, Button, Modal, Form, Input, InputNumber, DatePicker, message, Progress, Row, Col, Divider, Typography, Tabs, Select, Alert, Empty, Statistic, Popconfirm, Slider, Timeline, Checkbox, Collapse } from 'antd';
-import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined, StarFilled, ClockCircleOutlined, ScheduleOutlined, FlagOutlined, SwapOutlined } from '@ant-design/icons';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate, SubstitutionPlanListResponse, SubstitutionPlan, SubstitutionPlanIngredient } from '../types';
-import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor } from '../api';
+import { EyeOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, LineChartOutlined, ThunderboltOutlined, DollarOutlined, CalculatorOutlined, SafetyOutlined, ExperimentOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined, AuditOutlined, HistoryOutlined, ExclamationCircleOutlined, FilePdfOutlined, GlobalOutlined, CaretDownOutlined, RiseOutlined, FallOutlined, StarFilled, ClockCircleOutlined, ScheduleOutlined, FlagOutlined, SwapOutlined, EnvironmentOutlined, WarningOutlined, ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import type { FormulaVersion, Batch, IngredientItem, IngredientTrendResponse, FormulaRecommendationResponse, VersionTreeNode, CostBreakdownResponse, CostSimulateResponse, CostSimulateItem, SupplierQuote, StabilityRiskResponse, AgingSimulationResponse, CompatibilityListItem, ApprovalRecord, VersionReviewRecord, ComplianceReportResponse, MultiMarketCompareResponse, ImpactAnalysisResponse, LifecycleTimelineResponse, LifecycleEvent, Milestone, ProductLineLifecycleStats, MilestoneCreate, SubstitutionPlanListResponse, SubstitutionPlan, SubstitutionPlanIngredient, SustainabilityScoreResponse, SustainabilityCompareResponse } from '../types';
+import { getScoreColor, api, getApprovalStatusLabel, getApprovalStatusTagColor, getReviewStatusLabel, getReviewStatusTagColor, getDecisionLabel, getDecisionTagColor, getSustainabilityColor, getSustainabilityLabel, getSourceCategoryColor, getSourceCategoryLabel, collectVersionIds } from '../api';
 
 const { Title, Text } = Typography;
 
@@ -100,6 +100,12 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
   const [substitutionPlansData, setSubstitutionPlansData] = useState<SubstitutionPlanListResponse | null>(null);
   const [substitutionPlansLoading, setSubstitutionPlansLoading] = useState(false);
   const [selectedPlanPreview, setSelectedPlanPreview] = useState<SubstitutionPlan | null>(null);
+
+  const [sustainabilityScore, setSustainabilityScore] = useState<SustainabilityScoreResponse | null>(null);
+  const [sustainabilityLoading, setSustainabilityLoading] = useState(false);
+  const [compareVersionId, setCompareVersionId] = useState<number | null>(null);
+  const [sustainabilityCompare, setSustainabilityCompare] = useState<SustainabilityCompareResponse | null>(null);
+  const [sustainabilityCompareLoading, setSustainabilityCompareLoading] = useState(false);
 
   const allIngredients = [...version.ingredients].sort((a, b) => b.percentage - a.percentage);
   const batchesForVersion = allBatches.filter(b => b.version_id === version.id);
@@ -228,6 +234,46 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
       });
     return () => { cancelled = true; };
   }, [version.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSustainabilityLoading(true);
+    api.getSustainabilityScore(version.id)
+      .then(data => {
+        if (!cancelled) setSustainabilityScore(data);
+      })
+      .catch(e => {
+        if (!cancelled) {
+          message.error('加载可持续性评分失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSustainabilityLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [version.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (compareVersionId !== null) {
+      setSustainabilityCompareLoading(true);
+      api.compareSustainability(version.id, compareVersionId)
+        .then(data => {
+          if (!cancelled) setSustainabilityCompare(data);
+        })
+        .catch(e => {
+          if (!cancelled) {
+            message.error('加载可持续性对比数据失败');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSustainabilityCompareLoading(false);
+        });
+    } else {
+      setSustainabilityCompare(null);
+    }
+    return () => { cancelled = true; };
+  }, [version.id, compareVersionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2714,6 +2760,528 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
     );
   };
 
+  const renderSustainabilityTab = () => {
+    const allVersions = useMemo(() => {
+      const ids: number[] = [];
+      versionTree.forEach(root => collectVersionIds(root, ids));
+      return ids.map(id => {
+        const findNode = (nodes: VersionTreeNode[]): VersionTreeNode | null => {
+          for (const node of nodes) {
+            if (node.id === id) return node;
+            const found = findNode(node.children);
+            if (found) return found;
+          }
+          return null;
+        };
+        return findNode(versionTree);
+      }).filter((v): v is VersionTreeNode => v !== null && v.id !== version.id);
+    }, [versionTree, version.id]);
+
+    const renderGauge = (score: number, size: number = 200) => {
+      const angle = (score / 100) * 180 - 90;
+      const color = getSustainabilityColor(score);
+      const label = getSustainabilityLabel(score);
+
+      const segments = [
+        { start: -90, end: -18, color: '#f5222d', label: '0-40' },
+        { start: -18, end: 36, color: '#faad14', label: '40-70' },
+        { start: 36, end: 90, color: '#52c41a', label: '70-100' },
+      ];
+
+      const createArcPath = (startAngle: number, endAngle: number, innerR: number, outerR: number) => {
+        const startRad = (startAngle * Math.PI) / 180;
+        const endRad = (endAngle * Math.PI) / 180;
+        const x1 = size / 2 + innerR * Math.cos(startRad);
+        const y1 = size / 2 + innerR * Math.sin(startRad);
+        const x2 = size / 2 + outerR * Math.cos(startRad);
+        const y2 = size / 2 + outerR * Math.sin(startRad);
+        const x3 = size / 2 + outerR * Math.cos(endRad);
+        const y3 = size / 2 + outerR * Math.sin(endRad);
+        const x4 = size / 2 + innerR * Math.cos(endRad);
+        const y4 = size / 2 + innerR * Math.sin(endRad);
+        const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+        return `M ${x1} ${y1} L ${x2} ${y2} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1} ${y1} Z`;
+      };
+
+      const pointerRad = (angle * Math.PI) / 180;
+      const pointerLength = size * 0.35;
+      const pointerX = size / 2 + pointerLength * Math.cos(pointerRad);
+      const pointerY = size / 2 + pointerLength * Math.sin(pointerRad);
+
+      return (
+        <div style={{ position: 'relative', width: size, height: size / 2 + 30 }}>
+          <svg width={size} height={size / 2 + 30} viewBox={`0 0 ${size} ${size / 2 + 30}`}>
+            {segments.map((seg, idx) => (
+              <path
+                key={idx}
+                d={createArcPath(seg.start, seg.end, size * 0.35, size * 0.45)}
+                fill={seg.color}
+                opacity={0.3}
+              />
+            ))}
+            <line
+              x1={size / 2}
+              y1={size / 2}
+              x2={pointerX}
+              y2={pointerY}
+              stroke={color}
+              strokeWidth={3}
+              strokeLinecap="round"
+            />
+            <circle cx={size / 2} cy={size / 2} r={8} fill={color} />
+            <text x={size / 2} y={size / 2 + 50} textAnchor="middle" fontSize={28} fontWeight="bold" fill={color}>
+              {score.toFixed(1)}
+            </text>
+            <text x={size / 2} y={size / 2 + 70} textAnchor="middle" fontSize={14} fill="#666">
+              {label}
+            </text>
+          </svg>
+        </div>
+      );
+    };
+
+    const renderRingChart = (score: number, title: string, size: number = 120) => {
+      const color = getSustainabilityColor(score);
+      const radius = size / 2 - 10;
+      const circumference = 2 * Math.PI * radius;
+      const offset = circumference - (score / 100) * circumference;
+
+      return (
+        <div style={{ textAlign: 'center' }}>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="#f0f0f0"
+              strokeWidth={12}
+            />
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={color}
+              strokeWidth={12}
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+            />
+            <text x={size / 2} y={size / 2 + 5} textAnchor="middle" fontSize={18} fontWeight="bold" fill={color}>
+              {score.toFixed(0)}
+            </text>
+          </svg>
+          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{title}</div>
+        </div>
+      );
+    };
+
+    const getRadarData = () => {
+      if (!sustainabilityScore) return [];
+      const data = [
+        {
+          dimension: '生物降解性',
+          current: sustainabilityScore.biodegradability_score,
+          ...(sustainabilityCompare ? { compare: sustainabilityCompare.biodegradability_score.right_value } : {}),
+          fullMark: 100,
+        },
+        {
+          dimension: '碳足迹评分',
+          current: sustainabilityScore.carbon_footprint_score,
+          ...(sustainabilityCompare ? { compare: sustainabilityCompare.carbon_footprint_score.right_value } : {}),
+          fullMark: 100,
+        },
+        {
+          dimension: '来源评分',
+          current: sustainabilityScore.source_score,
+          ...(sustainabilityCompare ? { compare: sustainabilityCompare.source_score.right_value } : {}),
+          fullMark: 100,
+        },
+        {
+          dimension: '综合评分',
+          current: sustainabilityScore.total_score,
+          ...(sustainabilityCompare ? { compare: sustainabilityCompare.total_score.right_value } : {}),
+          fullMark: 100,
+        },
+      ];
+      return data;
+    };
+
+    const contributionColumns = [
+      {
+        title: '成分名称',
+        dataIndex: 'ingredient_name',
+        key: 'ingredient_name',
+        render: (v: string, record: any) => (
+          <Space>
+            <Text strong>{v}</Text>
+            {!record.has_data && <Tag color="default">数据缺失</Tag>}
+          </Space>
+        ),
+      },
+      {
+        title: '占比',
+        dataIndex: 'percentage',
+        key: 'percentage',
+        width: 80,
+        render: (v: number) => `${v.toFixed(2)}%`,
+      },
+      {
+        title: '来源分类',
+        dataIndex: 'source_category',
+        key: 'source_category',
+        width: 100,
+        render: (v: string | null | undefined) => v ? (
+          <Tag color={getSourceCategoryColor(v)}>{getSourceCategoryLabel(v)}</Tag>
+        ) : <Text type="secondary">-</Text>,
+      },
+      {
+        title: '生物降解性',
+        dataIndex: 'biodegradability_score',
+        key: 'biodegradability_score',
+        width: 100,
+        render: (v: number | null | undefined, record: any) => v !== null && v !== undefined ? (
+          <Space>
+            <Progress
+              percent={v}
+              size="small"
+              showInfo={false}
+              strokeColor={getSustainabilityColor(v)}
+              style={{ width: 60 }}
+            />
+            <span>{v.toFixed(0)}</span>
+          </Space>
+        ) : record.has_data ? '0' : <Text type="secondary">-</Text>,
+      },
+      {
+        title: '碳足迹 (kg CO₂/kg)',
+        dataIndex: 'carbon_footprint',
+        key: 'carbon_footprint',
+        width: 130,
+        render: (v: number | null | undefined, record: any) => v !== null && v !== undefined ? (
+          <span style={{ color: v > 5 ? '#f5222d' : v > 2 ? '#faad14' : '#52c41a' }}>
+            {v.toFixed(2)}
+          </span>
+        ) : record.has_data ? '0' : <Text type="secondary">-</Text>,
+      },
+      {
+        title: '微塑料风险',
+        dataIndex: 'has_microplastic_risk',
+        key: 'has_microplastic_risk',
+        width: 100,
+        render: (v: boolean | null | undefined) => v === true ? (
+          <Tag color="red" icon={<WarningOutlined />}>有风险</Tag>
+        ) : v === false ? (
+          <Tag color="green" icon={<CheckCircleOutlined />}>无风险</Tag>
+        ) : <Text type="secondary">-</Text>,
+      },
+    ];
+
+    const compareColumns = [
+      {
+        title: '成分名称',
+        dataIndex: 'ingredient_name',
+        key: 'ingredient_name',
+        render: (v: string, record: any) => (
+          <Space>
+            <Text strong>{v}</Text>
+            {record.change_type === 'added' && <Tag color="green">新增</Tag>}
+            {record.change_type === 'removed' && <Tag color="red">移除</Tag>}
+          </Space>
+        ),
+      },
+      {
+        title: `${sustainabilityCompare ? `V${sustainabilityCompare.left_version_number}` : '当前'}占比`,
+        dataIndex: 'left_percentage',
+        key: 'left_percentage',
+        width: 100,
+        render: (v: number | null | undefined) => v !== null && v !== undefined ? `${v.toFixed(2)}%` : '-',
+      },
+      {
+        title: `${sustainabilityCompare ? `V${sustainabilityCompare.right_version_number}` : '对比'}占比`,
+        dataIndex: 'right_percentage',
+        key: 'right_percentage',
+        width: 100,
+        render: (v: number | null | undefined) => v !== null && v !== undefined ? `${v.toFixed(2)}%` : '-',
+      },
+      {
+        title: '环境影响变化',
+        dataIndex: 'impact_label',
+        key: 'impact_label',
+        render: (v: string, record: any) => {
+          const isPositive = v.includes('正面') || v.includes('新增环保') || v.includes('移除环境负担');
+          const isNegative = v.includes('负面') || v.includes('新增环境负担') || v.includes('移除环保');
+          const icon = isPositive ? <ArrowUpOutlined style={{ color: '#52c41a' }} /> :
+                       isNegative ? <ArrowDownOutlined style={{ color: '#f5222d' }} /> :
+                       <MinusOutlined style={{ color: '#999' }} />;
+          const color = isPositive ? '#52c41a' : isNegative ? '#f5222d' : '#999';
+          return (
+            <Space>
+              {icon}
+              <span style={{ color }}>{v}</span>
+              {record.environmental_impact_delta !== null && record.environmental_impact_delta !== undefined && (
+                <Tag color={record.environmental_impact_delta > 0 ? 'green' : 'red'}>
+                  {record.environmental_impact_delta > 0 ? '+' : ''}{record.environmental_impact_delta.toFixed(2)}
+                </Tag>
+              )}
+            </Space>
+          );
+        },
+      },
+    ];
+
+    return (
+      <Space direction="vertical" size={24} style={{ width: '100%' }}>
+        <Card
+          size="small"
+          title={<Space><EnvironmentOutlined /> 可持续性评分</Space>}
+          loading={sustainabilityLoading}
+          extra={
+            sustainabilityScore && !sustainabilityScore.is_reliable && (
+              <Tag color="orange" icon={<ExclamationCircleOutlined />}>
+                数据不可靠（缺失 {sustainabilityScore.missing_percentage.toFixed(0)}%）
+              </Tag>
+            )
+          }
+        >
+          {sustainabilityScore ? (
+            <Space direction="vertical" size={24} style={{ width: '100%' }}>
+              <Row gutter={24} align="middle">
+                <Col span={8} style={{ display: 'flex', justifyContent: 'center' }}>
+                  {renderGauge(sustainabilityScore.total_score)}
+                </Col>
+                <Col span={16}>
+                  <Row gutter={16}>
+                    <Col span={8} style={{ display: 'flex', justifyContent: 'center' }}>
+                      {renderRingChart(sustainabilityScore.biodegradability_score, '生物降解性')}
+                    </Col>
+                    <Col span={8} style={{ display: 'flex', justifyContent: 'center' }}>
+                      {renderRingChart(sustainabilityScore.carbon_footprint_score, '碳足迹评分')}
+                    </Col>
+                    <Col span={8} style={{ display: 'flex', justifyContent: 'center' }}>
+                      {renderRingChart(sustainabilityScore.source_score, '来源评分')}
+                    </Col>
+                  </Row>
+                  <Row gutter={16} style={{ marginTop: 16 }}>
+                    <Col span={12}>
+                      <Statistic
+                        title="微塑料惩罚"
+                        value={sustainabilityScore.microplastic_penalty}
+                        suffix="分"
+                        valueStyle={{ color: sustainabilityScore.microplastic_penalty > 0 ? '#f5222d' : '#52c41a' }}
+                        prefix={sustainabilityScore.has_microplastic_ingredient ? <WarningOutlined /> : <CheckCircleOutlined />}
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <Statistic
+                        title="数据缺失"
+                        value={sustainabilityScore.missing_ingredients.length}
+                        suffix={`个成分 (${sustainabilityScore.missing_percentage.toFixed(1)}%)`}
+                        valueStyle={{ color: sustainabilityScore.missing_ingredients.length > 0 ? '#faad14' : '#52c41a' }}
+                      />
+                    </Col>
+                  </Row>
+                  {sustainabilityScore.missing_ingredients.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <Text type="secondary">缺失环境数据的成分：</Text>
+                      <Space wrap size={[4, 4]} style={{ marginLeft: 8 }}>
+                        {sustainabilityScore.missing_ingredients.map(name => (
+                          <Tag key={name} color="default">{name}</Tag>
+                        ))}
+                      </Space>
+                    </div>
+                  )}
+                </Col>
+              </Row>
+            </Space>
+          ) : (
+            <Empty description="暂无可持续性评分数据" />
+          )}
+        </Card>
+
+        <Card
+          size="small"
+          title={<Space><EnvironmentOutlined /> 成分环境贡献明细</Space>}
+          loading={sustainabilityLoading}
+        >
+          {sustainabilityScore ? (
+            <Table
+              size="small"
+              dataSource={sustainabilityScore.contributions.map((c, idx) => ({ key: idx, ...c }))}
+              pagination={false}
+              columns={contributionColumns}
+            />
+          ) : (
+            <Empty description="暂无成分数据" />
+          )}
+        </Card>
+
+        <Card
+          size="small"
+          title={<Space><SwapOutlined /> 版本对比</Space>}
+          extra={
+            <Space>
+              <span style={{ color: '#999', fontSize: 12 }}>对比版本：</span>
+              <Select
+                style={{ width: 200 }}
+                placeholder="选择要对比的版本"
+                value={compareVersionId}
+                allowClear
+                onChange={(value) => setCompareVersionId(value)}
+                options={allVersions.map(v => ({
+                  label: `V${v.version_number} - ${v.ingredients_summary}`,
+                  value: v.id,
+                }))}
+              />
+            </Space>
+          }
+        >
+          {compareVersionId === null ? (
+            <Empty description="请选择一个版本进行对比" />
+          ) : sustainabilityCompareLoading ? (
+            <div style={{ padding: 40, textAlign: 'center' }}>加载对比数据中...</div>
+          ) : sustainabilityCompare ? (
+            <Space direction="vertical" size={24} style={{ width: '100%' }}>
+              <Row gutter={24}>
+                <Col span={12}>
+                  <Card size="small" title="各维度评分对比">
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Statistic
+                          title={`V${sustainabilityCompare.left_version_number} 总分`}
+                          value={sustainabilityCompare.total_score.left_value}
+                          valueStyle={{ color: getSustainabilityColor(sustainabilityCompare.total_score.left_value) }}
+                        />
+                      </Col>
+                      <Col span={12}>
+                        <Statistic
+                          title={`V${sustainabilityCompare.right_version_number} 总分`}
+                          value={sustainabilityCompare.total_score.right_value}
+                          valueStyle={{ color: getSustainabilityColor(sustainabilityCompare.total_score.right_value) }}
+                          prefix={
+                            sustainabilityCompare.total_score.delta > 0 ?
+                              <ArrowUpOutlined style={{ color: '#52c41a' }} /> :
+                              sustainabilityCompare.total_score.delta < 0 ?
+                                <ArrowDownOutlined style={{ color: '#f5222d' }} /> :
+                                <MinusOutlined style={{ color: '#999' }} />
+                          }
+                        />
+                      </Col>
+                    </Row>
+                    <Row gutter={16} style={{ marginTop: 16 }}>
+                      <Col span={8}>
+                        <Statistic
+                          title="生物降解性"
+                          value={sustainabilityCompare.biodegradability_score.delta}
+                          prefix={sustainabilityCompare.biodegradability_score.delta > 0 ? '+' : ''}
+                          valueStyle={{ color: sustainabilityCompare.biodegradability_score.delta >= 0 ? '#52c41a' : '#f5222d' }}
+                          suffix="分"
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Statistic
+                          title="碳足迹"
+                          value={sustainabilityCompare.carbon_footprint_score.delta}
+                          prefix={sustainabilityCompare.carbon_footprint_score.delta > 0 ? '+' : ''}
+                          valueStyle={{ color: sustainabilityCompare.carbon_footprint_score.delta >= 0 ? '#52c41a' : '#f5222d' }}
+                          suffix="分"
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Statistic
+                          title="来源评分"
+                          value={sustainabilityCompare.source_score.delta}
+                          prefix={sustainabilityCompare.source_score.delta > 0 ? '+' : ''}
+                          valueStyle={{ color: sustainabilityCompare.source_score.delta >= 0 ? '#52c41a' : '#f5222d' }}
+                          suffix="分"
+                        />
+                      </Col>
+                    </Row>
+                    {sustainabilityCompare.positive_impact_ingredients.length > 0 && (
+                      <Alert
+                        style={{ marginTop: 16 }}
+                        type="success"
+                        showIcon
+                        message="正面环境影响"
+                        description={
+                          <Space wrap>
+                            {sustainabilityCompare.positive_impact_ingredients.map(name => (
+                              <Tag key={name} color="green">{name}</Tag>
+                            ))}
+                          </Space>
+                        }
+                      />
+                    )}
+                    {sustainabilityCompare.negative_impact_ingredients.length > 0 && (
+                      <Alert
+                        style={{ marginTop: 16 }}
+                        type="error"
+                        showIcon
+                        message="负面环境影响"
+                        description={
+                          <Space wrap>
+                            {sustainabilityCompare.negative_impact_ingredients.map(name => (
+                              <Tag key={name} color="red">{name}</Tag>
+                            ))}
+                          </Space>
+                        }
+                      />
+                    )}
+                  </Card>
+                </Col>
+                <Col span={12}>
+                  <Card size="small" title="雷达图对比">
+                    <div style={{ height: 300 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart data={getRadarData()}>
+                          <PolarGrid />
+                          <PolarAngleAxis dataKey="dimension" />
+                          <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                          <Radar
+                            name={`V${sustainabilityCompare.left_version_number}（当前）`}
+                            dataKey="current"
+                            stroke="#1890ff"
+                            fill="#1890ff"
+                            fillOpacity={0.3}
+                          />
+                          {sustainabilityCompare && (
+                            <Radar
+                              name={`V${sustainabilityCompare.right_version_number}`}
+                              dataKey="compare"
+                              stroke="#faad14"
+                              fill="#faad14"
+                              fillOpacity={0.3}
+                            />
+                          )}
+                          <Legend />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                </Col>
+              </Row>
+
+              <Card size="small" title="逐成分环境贡献对比">
+                <Table
+                  size="small"
+                  dataSource={sustainabilityCompare.ingredient_comparisons.map((c, idx) => ({ key: idx, ...c }))}
+                  pagination={false}
+                  columns={compareColumns}
+                />
+              </Card>
+            </Space>
+          ) : (
+            <Empty description="对比数据加载失败" />
+          )}
+        </Card>
+      </Space>
+    );
+  };
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <Card
@@ -2918,6 +3486,11 @@ export default function VersionDetail({ version, batches, allBatches, versionTre
               key: 'timeline',
               label: <span><ScheduleOutlined /> 时间线</span>,
               children: renderTimelineTab()
+            },
+            {
+              key: 'sustainability',
+              label: <span><EnvironmentOutlined /> 可持续性</span>,
+              children: renderSustainabilityTab()
             }
           ]}
         />

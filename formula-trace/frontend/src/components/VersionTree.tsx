@@ -1,5 +1,5 @@
 import type { VersionTreeNode, BudgetStatusItem } from '../types';
-import { getScoreGradient, getApprovalStatusColor, getApprovalStatusLabel, getBudgetStatusColor, getBudgetStatusLabel } from '../api';
+import { getScoreGradient, getApprovalStatusColor, getApprovalStatusLabel, getBudgetStatusColor, getBudgetStatusLabel, getSustainabilityColor, getSustainabilityLabel } from '../api';
 import { Checkbox, Tag, Tooltip } from 'antd';
 
 interface Props {
@@ -67,69 +67,115 @@ function renderNode(
     );
   };
 
+  const sustainabilityScore = node.sustainability_score;
+  const sustainabilityColor = sustainabilityScore !== null ? getSustainabilityColor(sustainabilityScore) : '#bfbfbf';
+  const sustainabilityLabel = sustainabilityScore !== null ? getSustainabilityLabel(sustainabilityScore) : '--';
+
+  const nodeTooltipTitle = (
+    <div style={{ fontSize: 12 }}>
+      <div><strong>版本：</strong>V{node.version_number}</div>
+      <div><strong>状态：</strong>{getApprovalStatusLabel(node.approval_status)}</div>
+      <div><strong>成分：</strong>{node.ingredients_summary}</div>
+      {node.batch_count > 0 && (
+        <div><strong>批次数据：</strong>{node.batch_count} 个批次 · 最高评分 {node.best_batch_score?.toFixed(1)}</div>
+      )}
+      {budgetStatus && budgetStatus.actual_cost !== null && (
+        <div><strong>成本：</strong>¥{budgetStatus.actual_cost.toFixed(2)}/kg</div>
+      )}
+      <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #f0f0f0' }}>
+        <strong>可持续性评分：</strong>
+        {sustainabilityScore !== null ? (
+          <span style={{ color: sustainabilityColor, fontWeight: 'bold' }}>
+            {sustainabilityScore.toFixed(1)} ({sustainabilityLabel})
+          </span>
+        ) : (
+          <span style={{ color: '#bfbfbf' }}>--</span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div key={node.id} style={{ marginLeft: level > 0 ? 20 : 0 }}>
-      <div
-        className={`tree-node ${isSelected ? 'selected' : ''} ${!hasBatches ? 'no-batches' : ''}`}
-        onClick={() => onSelect(node.id)}
-        style={{ borderLeftColor: statusColor }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Checkbox
-            checked={isCompareSelected}
-            onClick={e => e.stopPropagation()}
-            onChange={() => onToggleCompare(node.id)}
-          />
-          <span className="version-badge" style={{ background: scoreColor, color: 'white' }}>
-            V{node.version_number}
-          </span>
-          {renderBudgetIcon()}
-          <Tag
-            style={{
-              fontSize: 11,
-              lineHeight: '18px',
-              padding: '0 4px',
-              margin: 0,
-              borderRadius: 4,
-              background: `${statusColor}20`,
-              color: statusColor,
-              border: `1px solid ${statusColor}40`,
-            }}
-          >
-            {getApprovalStatusLabel(node.approval_status)}
-          </Tag>
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {node.ingredients_summary}
-          </span>
-        </div>
-        <div style={{ marginTop: 4, paddingLeft: 28, fontSize: 12, color: '#999' }}>
-          {node.batch_count > 0 ? (
-            <span>
-              <span className="score-color" style={{ background: scoreColor }} />
-              <span style={{ marginLeft: 4 }}>
-                {node.batch_count} 个批次 · 最高评分 {node.best_batch_score?.toFixed(1)}
-              </span>
-              {budgetStatus && budgetStatus.actual_cost !== null && (
-                <span style={{ marginLeft: 12 }}>
-                  · 成本 ¥{budgetStatus.actual_cost.toFixed(2)}/kg
-                  {budgetStatus.budget_ratio !== null && (
-                    <span style={{ color: budgetColor || '#999', marginLeft: 4 }}>
-                      ({(budgetStatus.budget_ratio * 100).toFixed(0)}%)
-                    </span>
-                  )}
-                </span>
-              )}
-              {budgetStatus && budgetStatus.has_unknown_cost && (
-                <Tag color="warning" style={{ marginLeft: 8, fontSize: 10 }}>
-                  预算不可靠
-                </Tag>
-              )}
+      <Tooltip title={nodeTooltipTitle} placement="right" mouseEnterDelay={0.3}>
+        <div
+          className={`tree-node ${isSelected ? 'selected' : ''} ${!hasBatches ? 'no-batches' : ''}`}
+          onClick={() => onSelect(node.id)}
+          style={{ borderLeftColor: statusColor }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Checkbox
+              checked={isCompareSelected}
+              onClick={e => e.stopPropagation()}
+              onChange={() => onToggleCompare(node.id)}
+            />
+            <span className="version-badge" style={{ background: scoreColor, color: 'white' }}>
+              V{node.version_number}
             </span>
-          ) : (
-            <span>暂无批次数据</span>
-          )}
+            {renderBudgetIcon()}
+            <Tag
+              style={{
+                fontSize: 11,
+                lineHeight: '18px',
+                padding: '0 4px',
+                margin: 0,
+                borderRadius: 4,
+                background: `${statusColor}20`,
+                color: statusColor,
+                border: `1px solid ${statusColor}40`,
+              }}
+            >
+              {getApprovalStatusLabel(node.approval_status)}
+            </Tag>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {node.ingredients_summary}
+            </span>
+            {sustainabilityScore !== null && (
+              <Tag
+                style={{
+                  fontSize: 10,
+                  lineHeight: '16px',
+                  padding: '0 4px',
+                  margin: 0,
+                  borderRadius: 4,
+                  background: `${sustainabilityColor}15`,
+                  color: sustainabilityColor,
+                  border: `1px solid ${sustainabilityColor}30`,
+                }}
+              >
+                🌱 {sustainabilityScore.toFixed(0)}
+              </Tag>
+            )}
+          </div>
+          <div style={{ marginTop: 4, paddingLeft: 28, fontSize: 12, color: '#999' }}>
+            {node.batch_count > 0 ? (
+              <span>
+                <span className="score-color" style={{ background: scoreColor }} />
+                <span style={{ marginLeft: 4 }}>
+                  {node.batch_count} 个批次 · 最高评分 {node.best_batch_score?.toFixed(1)}
+                </span>
+                {budgetStatus && budgetStatus.actual_cost !== null && (
+                  <span style={{ marginLeft: 12 }}>
+                    · 成本 ¥{budgetStatus.actual_cost.toFixed(2)}/kg
+                    {budgetStatus.budget_ratio !== null && (
+                      <span style={{ color: budgetColor || '#999', marginLeft: 4 }}>
+                        ({(budgetStatus.budget_ratio * 100).toFixed(0)}%)
+                      </span>
+                    )}
+                  </span>
+                )}
+                {budgetStatus && budgetStatus.has_unknown_cost && (
+                  <Tag color="warning" style={{ marginLeft: 8, fontSize: 10 }}>
+                    预算不可靠
+                  </Tag>
+                )}
+              </span>
+            ) : (
+              <span>暂无批次数据</span>
+            )}
+          </div>
         </div>
-      </div>
+      </Tooltip>
       {node.children.length > 0 && (
         <div>
           {node.children.map(child =>

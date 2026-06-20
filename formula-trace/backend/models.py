@@ -403,3 +403,25 @@ class BudgetAlert(Base):
 
     budget = relationship("CostBudget")
     version = relationship("FormulaVersion")
+
+
+class IngredientEnvironmentalAttribute(Base):
+    __tablename__ = "ingredient_environmental_attributes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
+    biodegradability_score: Mapped[float] = mapped_column(Float, nullable=False)
+    carbon_footprint: Mapped[float] = mapped_column(Float, nullable=False)
+    source_category: Mapped[str] = mapped_column(String(20), nullable=False)
+    has_microplastic_risk: Mapped[bool] = mapped_column(nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)
+
+    @property
+    def source_score(self) -> int:
+        score_map = {
+            "天然": 100,
+            "半合成": 60,
+            "全合成": 30
+        }
+        return score_map.get(self.source_category, 0)

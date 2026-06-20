@@ -59,6 +59,9 @@ import type {
   CostBudgetCreate,
   BudgetAlert,
   BudgetMonitoringResponse,
+  EnvironmentalAttribute,
+  SustainabilityScoreResponse,
+  SustainabilityCompareResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -378,6 +381,48 @@ export const api = {
 
   getAlert: (alertId: number): Promise<BudgetAlert> =>
     axios.get(`${API_BASE}/budgets/alerts/${alertId}`).then(r => r.data),
+
+  getEnvironmentalAttributes: (sourceCategory?: string): Promise<EnvironmentalAttribute[]> =>
+    axios.get(`${API_BASE}/sustainability/attributes`, {
+      params: sourceCategory ? { source_category: sourceCategory } : {}
+    }).then(r => r.data),
+
+  getEnvironmentalAttribute: (ingredientName: string): Promise<EnvironmentalAttribute> =>
+    axios.get(`${API_BASE}/sustainability/attributes/${encodeURIComponent(ingredientName)}`).then(r => r.data),
+
+  createEnvironmentalAttribute: (data: {
+    ingredient_name: string;
+    biodegradability_score: number;
+    carbon_footprint: number;
+    source_category: string;
+    has_microplastic_risk?: boolean;
+  }): Promise<EnvironmentalAttribute> =>
+    axios.post(`${API_BASE}/sustainability/attributes`, data).then(r => r.data),
+
+  updateEnvironmentalAttribute: (ingredientName: string, data: {
+    biodegradability_score?: number;
+    carbon_footprint?: number;
+    source_category?: string;
+    has_microplastic_risk?: boolean;
+  }): Promise<EnvironmentalAttribute> =>
+    axios.put(`${API_BASE}/sustainability/attributes/${encodeURIComponent(ingredientName)}`, data).then(r => r.data),
+
+  batchUpdateEnvironmentalAttributes: (items: Array<{
+    ingredient_name: string;
+    biodegradability_score: number;
+    carbon_footprint: number;
+    source_category: string;
+    has_microplastic_risk?: boolean;
+  }>): Promise<{ success_count: number; updated_count: number; created_count: number; total_count: number }> =>
+    axios.post(`${API_BASE}/sustainability/attributes/batch`, { items }).then(r => r.data),
+
+  getSustainabilityScore: (versionId: number): Promise<SustainabilityScoreResponse> =>
+    axios.get(`${API_BASE}/sustainability/score/${versionId}`).then(r => r.data),
+
+  compareSustainability: (leftId: number, rightId: number): Promise<SustainabilityCompareResponse> =>
+    axios.get(`${API_BASE}/sustainability/compare`, {
+      params: { left_id: leftId, right_id: rightId }
+    }).then(r => r.data),
 };
 
 export function getScoreColor(score: number | null): string {
@@ -553,4 +598,30 @@ export function getAlertTypeColor(alertType: string): string {
     case 'over_budget': return '#f5222d';
     default: return '#8c8c8c';
   }
+}
+
+export function getSustainabilityColor(score: number): string {
+  if (score >= 70) return '#52c41a';
+  if (score >= 40) return '#faad14';
+  return '#f5222d';
+}
+
+export function getSustainabilityLabel(score: number): string {
+  if (score >= 80) return '优秀';
+  if (score >= 60) return '良好';
+  if (score >= 40) return '一般';
+  return '较差';
+}
+
+export function getSourceCategoryColor(category: string | null | undefined): string {
+  switch (category) {
+    case '天然': return '#52c41a';
+    case '半合成': return '#faad14';
+    case '全合成': return '#f5222d';
+    default: return '#8c8c8c';
+  }
+}
+
+export function getSourceCategoryLabel(category: string | null | undefined): string {
+  return category || '未知';
 }

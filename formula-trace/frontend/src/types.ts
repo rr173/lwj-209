@@ -30,6 +30,7 @@ export interface VersionTreeNode {
   batch_count: number;
   best_batch_score: number | null;
   approval_status: string;
+  sustainability_score: number | null;
   children: VersionTreeNode[];
 }
 
@@ -858,4 +859,78 @@ export interface BudgetMonitoringResponse {
   product_line_id: number;
   active_budget: CostBudget | null;
   items: BudgetStatusItem[];
+}
+
+export interface EnvironmentalAttribute {
+  id: number;
+  ingredient_name: string;
+  biodegradability_score: number;
+  carbon_footprint: number;
+  source_category: string;
+  has_microplastic_risk: boolean;
+  source_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IngredientEnvironmentalContribution {
+  ingredient_name: string;
+  percentage: number;
+  has_data: boolean;
+  biodegradability_score?: number | null;
+  carbon_footprint?: number | null;
+  source_category?: string | null;
+  has_microplastic_risk?: boolean | null;
+  weighted_biodegradability?: number | null;
+  weighted_carbon?: number | null;
+  weighted_source?: number | null;
+}
+
+export interface SustainabilityScoreResponse {
+  version_id: number;
+  version_number: number;
+  total_score: number;
+  biodegradability_score: number;
+  carbon_footprint_score: number;
+  source_score: number;
+  microplastic_penalty: number;
+  is_reliable: boolean;
+  missing_ingredients: string[];
+  missing_percentage: number;
+  contributions: IngredientEnvironmentalContribution[];
+  has_microplastic_ingredient: boolean;
+}
+
+export interface CompareSustainabilityDimension {
+  left_value: number;
+  right_value: number;
+  delta: number;
+  delta_percentage: number;
+}
+
+export interface CompareIngredientContribution {
+  ingredient_name: string;
+  left_percentage?: number | null;
+  right_percentage?: number | null;
+  change_type: string;
+  left_environmental_score?: number | null;
+  right_environmental_score?: number | null;
+  environmental_impact_delta?: number | null;
+  impact_label: string;
+}
+
+export interface SustainabilityCompareResponse {
+  left_version_id: number;
+  left_version_number: number;
+  right_version_id: number;
+  right_version_number: number;
+  total_score: CompareSustainabilityDimension;
+  biodegradability_score: CompareSustainabilityDimension;
+  carbon_footprint_score: CompareSustainabilityDimension;
+  source_score: CompareSustainabilityDimension;
+  left_reliable: boolean;
+  right_reliable: boolean;
+  ingredient_comparisons: CompareIngredientContribution[];
+  positive_impact_ingredients: string[];
+  negative_impact_ingredients: string[];
 }
